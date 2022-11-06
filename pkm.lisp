@@ -155,25 +155,69 @@
   (setf *sorted-handlers* (reverse *sorted-handlers*)))
 
 (defmacro define-handler (name deps args &body body)
+  "Create a function that runs when an entry has been created or updated.
+
+   For example, extract things from the content and create default triples.
+
+   A handler can rely on the results of other handlers. For example,
+   if one handler has decided that the entry is a URL string, then
+   another handler, which is dedicated to extracting URLs from the content,
+   must not even try to do its job.
+
+   In order to accomplish that, handlers declare their dependencies.
+
+   Handlers can do many things. In particular:
+
+   - define new triples, so they will be created if not exist already;
+   - change or delete triples, created by other handlers, before the
+     actual triples were created;
+   - add response components to UI;
+   - perform side effects on its own.
+
+   Macro Parameters:
+
+   - handler name (a symbol);
+   - dependencies - list of handler names (symbols);
+   - lambda list of function parameters:
+     - the entry,
+     - list of triples that had already been defined by other handlers.
+
+   The triples in the second argument have 4th element - tag (in addition
+   to subject, predicate, object). This tag is a symbol referencing
+   the handler, where the triple was defined. This allows you to find
+   the triples, defined by particular handlers (there is a helper function
+   'triples-by-handler'). The tag is temporary, it exists only in
+   'run-handlers' loop, and it's dismissed when the triple is actually
+   created.
+
+   Return plist with following optional keys:
+
+   - :triple  - define single triple
+   - :triples - define a list of triples
+   - :replace - entirely replace the triples that have already been defined
+                by other handlers.
+   - :respond - response to UI.
+  "
   `(progn
      (add-handler (quote ,name) (quote ,deps))
      (defun ,name ,args ,@body)))
 
 (defun run-handlers (entry &optional triples-before)
-  (let ((triples))
+  (let ((triples-after))
     (dolist (symbol *sorted-handlers*)
       (flet ((add-tag (triple) (append triple (list symbol))))
-	(multiple-value-bind (result effect) (funcall (symbol-function symbol) entry triples)
-	  (when effect
-	    (setf triples effect))
-	  (when result
-	    (setf triples (if (listp (car result))
-			      (append (mapcar #'add-tag result) triples)
-			      (cons (add-tag result) triples)))))))
-    (let ((triples (mapcar #'butlast triples)))
-      (dolist (triple (set-difference triples-before triples :test #'equalp))
+	(let ((handler-result (funcall (symbol-function symbol) entry triples-after)))
+	  (destructuring-bind (&key triple triples replace) handler-result
+	    (when replace
+	      (setf triples-after replace))
+	    (when triple
+	      (setf triples-after (cons (add-tag triple) triples-after)))
+	    (when triples
+	      (setf triples-after (append (mapcar #'add-tag triples) triples-after)))))))
+    (let ((triples-after (mapcar #'butlast triples-after)))
+      (dolist (triple (set-difference triples-before triples-after :test #'equalp))
 	(del-triple triple))
-      (dolist (triple triples)
+      (dolist (triple triples-after)
 	(ensure-triple triple)))))
 
 (defun triples-by-handler (symbol triples)
@@ -188,26 +232,32 @@
 
 (define-handler type-url () (entry triples)
   (declare (ignore triples))
-  "If the entry is a URL string, create triple where:
+  "If the content is a URL string, then create triple:
    - this entry,
    - predicate 'type',
-   - entry 'URL' (create if it doesn't exist yet)."
+   - entry with content 'URL' (create if it doesn't exist yet)."
   (when (url? (content entry))
-    (list (id entry) "type" (id (ensure-entry "URL")))))
+    (list :triple
+	  (list (id entry)
+		"type"
+		(id (ensure-entry "URL"))))))
 
 (defun find-urls (string)
   (ppcre:all-matches-as-strings "(https?:\\/\\/\\S+\\w)+" string))
 
 (define-handler extract-urls (type-url) (entry triples)
-  "1. Extract all URLs from the entry content.
+  "1. Extract all URLs from the content.
    2. Create or find entries for each URL.
    3. Create triples:
       - this entry
       - predicate 'url',
-      - the extracted URL entry."
+      - the entry of the extracted URL."
   (when (not (triples-by-handler 'type-url triples))
-    (loop for url in (find-urls (content entry))
-	  collect (list (id entry) "url" (id (ensure-entry url))))))
+    (list :triples
+	  (loop for url in (find-urls (content entry))
+		collect (list (id entry)
+			      "url"
+			      (id (ensure-entry url)))))))
 
 ;;
 ;; Edit content with command-line interface
