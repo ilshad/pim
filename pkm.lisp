@@ -82,11 +82,11 @@
       (cond
 	((and short? (not short-content-before))
 	 (setf (gethash content *shorts*) id)
-	 (format t "(i) New short: ~s~%" entry))
+	 (format t "(i) Added to shorts: ~s~%" entry))
 
 	((and (not short?) short-content-before)
 	 (when (remhash short-content-before *shorts*)
-	   (format t "(i) Remove short: ~s~%" entry)))))))
+	   (format t "(i) Removed from shorts: ~s~%" entry)))))))
 
 ;;
 ;; Triples
@@ -155,73 +155,72 @@
   (setf *sorted-handlers* (reverse *sorted-handlers*)))
 
 (defmacro define-handler (name deps args &body body)
-  "Create a function that runs when an entry has been created or updated.
+  "Create handler function that runs when an entry has been created or updated.
 
-   For example, extract things from the content and create default triples.
+   For example, extract things from the content and create default triples,
+   or define additional interaction with user.
 
-   A handler can rely on the results of other handlers. For example,
-   if one handler has decided that the entry is a URL string, then
-   another handler, which is dedicated to extracting URLs from the content,
-   must not even try to do its job.
+   A handler can rely on the results of other handlers. For that, handlers
+   declare dependencies between each other, so they will run sorted according
+   to these dependencies.
 
-   In order to accomplish that, handlers declare their dependencies.
+   The function, created by this macro, takes:
 
-   Handlers can do many things. In particular:
+   - alist (association list), which accumulates the results of all handlers,
+   - the entry.
 
-   - define new triples, so they will be created if not exist already;
-   - change or delete triples, created by other handlers, before the
-     actual triples were created;
-   - add response components to UI;
-   - perform side effects on its own.
+   It returns results alist, possibly updated.
 
-   Macro Parameters:
+   In other words, the results alist is passing through all the handlers.
+   Each handler can update the results alist, adding its own result and
+   even modifying or dismissing the results of other handlers.
+
+   Handler's own result is a plist (property list) with possible keys:
+
+   - :triples - list of triples
+   - :respond - response to UI.
+
+   Assoc it into results alist using handler's name as a key:
+
+   (acons 'my-handler
+          (list :triples (list triple-1 triple-2 ...)
+                :respond (list ...))
+          results)
+
+   Macro parameters:
 
    - handler name (a symbol);
    - dependencies - list of handler names (symbols);
    - lambda list of function parameters:
-     - the entry,
-     - list of triples that had already been defined by other handlers.
+     - results alist,
+     - the entry.
 
-   The triples in the second argument have 4th element - tag (in addition
-   to subject, predicate, object). This tag is a symbol referencing
-   the handler, where the triple was defined. This allows you to find
-   the triples, defined by particular handlers (there is a helper function
-   'triples-by-handler'). The tag is temporary, it exists only in
-   'run-handlers' loop, and it's dismissed when the triple is actually
-   created.
-
-   Return plist with following optional keys:
-
-   - :triple  - define single triple
-   - :triples - define a list of triples
-   - :replace - entirely replace the triples that have already been defined
-                by other handlers.
-   - :respond - response to UI.
-  "
+   Return: results alist."
   `(progn
      (add-handler (quote ,name) (quote ,deps))
      (defun ,name ,args ,@body)))
 
+(defun reduce-over-handlers (entry)
+  (reduce #'(lambda (results symbol)
+	      (funcall (symbol-function symbol)
+		       results
+		       entry))
+	  *sorted-handlers*
+	  :initial-value nil))
+
 (defun run-handlers (entry &optional triples-before)
   (let ((triples-after))
-    (dolist (symbol *sorted-handlers*)
-      (flet ((add-tag (triple) (append triple (list symbol))))
-	(let ((handler-result (funcall (symbol-function symbol) entry triples-after)))
-	  (destructuring-bind (&key triple triples replace) handler-result
-	    (when replace
-	      (setf triples-after replace))
-	    (when triple
-	      (setf triples-after (cons (add-tag triple) triples-after)))
-	    (when triples
-	      (setf triples-after (append (mapcar #'add-tag triples) triples-after)))))))
-    (let ((triples-after (mapcar #'butlast triples-after)))
-      (dolist (triple (set-difference triples-before triples-after :test #'equalp))
-	(del-triple triple))
-      (dolist (triple triples-after)
-	(ensure-triple triple)))))
+    (dolist (result (reduce-over-handlers entry))
+      (format t "(i) ~s for #~s: ~s~%" (car result) (id entry) (cdr result))
+      (destructuring-bind (&key triples) (cdr result)
+	(setf triples-after (append triples-after triples))))
+    (dolist (triple (set-difference triples-before triples-after :test #'equalp))
+      (del-triple triple))
+    (dolist (triple triples-after)
+      (ensure-triple triple))))
 
-(defun triples-by-handler (symbol triples)
-  (loop for x in triples when (eq symbol (tag x)) collect x))
+(defun find-triples-by-handler (symbol results)
+  (getf (cdr (assoc symbol results)) :triples))
 
 ;;
 ;; Default handlers
@@ -230,34 +229,38 @@
 (defun url? (string)
   (not (zerop (ppcre:count-matches "^https?:\\/\\/\\S+$" string))))
 
-(define-handler type-url () (entry triples)
-  (declare (ignore triples))
+(define-handler type-url () (results entry)
   "If the content is a URL string, then create triple:
    - this entry,
    - predicate 'type',
    - entry with content 'URL' (create if it doesn't exist yet)."
-  (when (url? (content entry))
-    (list :triple
-	  (list (id entry)
-		"type"
-		(id (ensure-entry "URL"))))))
+  (if (url? (content entry))
+      (let ((triple (list (id entry)
+			  "type"
+			  (id (ensure-entry "URL")))))
+	(acons 'type-url
+	       (list :triples (list triple))
+	       results))
+      results))
 
 (defun find-urls (string)
   (ppcre:all-matches-as-strings "(https?:\\/\\/\\S+\\w)+" string))
 
-(define-handler extract-urls (type-url) (entry triples)
+(define-handler extract-urls (type-url) (results entry)
   "1. Extract all URLs from the content.
    2. Create or find entries for each URL.
    3. Create triples:
       - this entry
       - predicate 'url',
       - the entry of the extracted URL."
-  (when (not (triples-by-handler 'type-url triples))
-    (list :triples
-	  (loop for url in (find-urls (content entry))
-		collect (list (id entry)
-			      "url"
-			      (id (ensure-entry url)))))))
+  (if (null (find-triples-by-handler 'type-url results))
+      (acons 'extract-urls
+	     (list :triples (loop for url in (find-urls (content entry))
+				  collect (list (id entry)
+						"url"
+						(id (ensure-entry url)))))
+	     results)
+      results))
 
 ;;
 ;; Edit content with command-line interface
