@@ -119,7 +119,6 @@
 (defun subj (triple) (car triple))
 (defun pred (triple) (cadr triple))
 (defun obj (triple) (caddr triple))
-(defun tag (triple) (cadddr triple))
 
 (defun search-triples (s p o &optional (triples *triples*))
   (remove-if-not
@@ -175,16 +174,17 @@
    Each handler can update the results alist, adding its own result and
    even modifying or dismissing the results of other handlers.
 
-   Handler's own result is a plist (property list) with possible keys:
+   The result is a plist (property list):
 
-   - :triples - list of triples
-   - :respond - response to UI.
+   - :triple   - single triple
+   - :triples  - list of triples
+   - :response - response to UI.
 
    Assoc it into results alist using handler's name as a key:
 
    (acons 'my-handler
-          (list :triples (list triple-1 triple-2 ...)
-                :respond (list ...))
+          (list :triple my-triple
+                :response my-response)
           results)
 
    Macro parameters:
@@ -212,15 +212,19 @@
   (let ((triples-after))
     (dolist (result (reduce-over-handlers entry))
       (format t "(i) ~s for #~s: ~s~%" (car result) (id entry) (cdr result))
-      (destructuring-bind (&key triples) (cdr result)
-	(setf triples-after (append triples-after triples))))
+      (destructuring-bind (&key triple triples) (cdr result)
+	(when triple
+	  (setf triples-after (append triples-after (list triple))))
+	(when triples
+	  (setf triples-after (append triples-after triples)))))
     (dolist (triple (set-difference triples-before triples-after :test #'equalp))
       (del-triple triple))
     (dolist (triple triples-after)
       (ensure-triple triple))))
 
 (defun find-triples-by-handler (symbol results)
-  (getf (cdr (assoc symbol results)) :triples))
+  (or (getf (cdr (assoc symbol results)) :triple)
+      (getf (cdr (assoc symbol results)) :triples)))
 
 ;;
 ;; Default handlers
@@ -235,12 +239,8 @@
    - predicate 'type',
    - entry with content 'URL' (create if it doesn't exist yet)."
   (if (url? (content entry))
-      (let ((triple (list (id entry)
-			  "type"
-			  (id (ensure-entry "URL")))))
-	(acons 'type-url
-	       (list :triples (list triple))
-	       results))
+      (let ((triple (list (id entry) "type" (id (ensure-entry "URL")))))
+	(acons 'type-url (list :triple triple) results))
       results))
 
 (defun find-urls (string)
@@ -254,12 +254,13 @@
       - predicate 'url',
       - the entry of the extracted URL."
   (if (null (find-triples-by-handler 'type-url results))
-      (acons 'extract-urls
-	     (list :triples (loop for url in (find-urls (content entry))
-				  collect (list (id entry)
-						"url"
-						(id (ensure-entry url)))))
-	     results)
+      (let ((triples (loop for url in (find-urls (content entry))
+			   collect (list (id entry)
+					 "url"
+					 (id (ensure-entry url))))))
+	(if triples
+	    (acons 'extract-urls (list :triples triples) results)
+	    results))
       results))
 
 ;;
