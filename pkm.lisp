@@ -7,6 +7,7 @@
 ;;
 
 (defvar *entries* (make-hash-table))
+(defvar *shorts* (make-hash-table :test 'equalp))
 
 (defvar *entry-id-pointer* 0)
 
@@ -15,12 +16,11 @@
    (content :initarg :content :accessor content)))
 
 (defmethod print-object ((object entry) stream)
-  (print-unreadable-object (object stream :type t)
-    (with-slots (id content) object
-      (multiple-value-bind (string cut?) (string-cut content 20)
-	(format stream
-		"~d: \"~a~:[\"~;...\" (~d chars)~]"
-		id string cut? (length content))))))
+  (with-slots (id content) object
+    (multiple-value-bind (string cut?) (string-cut content 20)
+      (format stream
+	      "~d: \"~a~:[\"~;...\" (~d chars)~]"
+	      id string cut? (length content)))))
 
 (defun string-cut (string length)
   (let ((length (min length (or (position #\Newline string) (1+ length)))))
@@ -56,6 +56,13 @@
       (update-short entry short-before)
       (run-handlers entry triples-before))))
 
+(defun del-entry (entry)
+  (dolist (triple (search-triples (id entry) nil nil))
+    (del-triple triple))
+  (when (find-short (content entry))
+    (remhash (content entry) *shorts*))
+  (remhash (id entry) *entries*))
+
 (defun get-entry-by-id (id)
   (gethash id *entries*))
 
@@ -63,10 +70,10 @@
 ;; Shorts
 ;;
 
-(defvar *shorts* (make-hash-table :test 'equalp))
-
 (defun short? (string)
-  (not (find #\Newline string)))
+  (and (null (find #\Newline string))
+       (or (null (find-urls string))
+	   (url? string))))
 
 (defun find-short (content)
   (when (short? content)
@@ -130,6 +137,19 @@
      ((and s (not p) o) #'(lambda (x) (and (eql s (subj x)) (eql o (obj x)))))
      ((and s p (not o)) #'(lambda (x) (and (eql s (subj x)) (equalp p (pred x))))))
    triples))
+
+(defun subject-of (entry)
+  (search-triples (id entry) nil nil))
+
+(defun object-of (entry)
+  (search-triples nil nil (id entry)))
+
+(defun complement-entry (entry triple)
+  (cond
+    ((= (id entry) (subj triple))
+     (values (get-entry-by-id (obj triple)) :object))
+    ((= (id entry) (obj triple))
+     (values (get-entry-by-id (subj triple)) :subject))))
 
 ;;
 ;; Handlers
@@ -211,7 +231,7 @@
 (defun run-handlers (entry &optional triples-before)
   (let ((triples-after))
     (dolist (result (reduce-over-handlers entry))
-      (format t "(i) ~s for #~s: ~s~%" (car result) (id entry) (cdr result))
+      ;(format t "(i) ~s for #~s: ~s~%" (car result) (id entry) (cdr result))
       (destructuring-bind (&key triple triples) (cdr result)
 	(when triple
 	  (setf triples-after (append triples-after (list triple))))
@@ -300,7 +320,7 @@
 ;; Command-line interface
 ;;
 
-(defun hr () (format t "~v{~c~:*~}~%" 50 '(#\-)))
+(defun hr () (format t "~&~v{~c~:*~}~%" 66 '(#\-)))
 (defun exit () (format t "Bye-bye.~%"))
 
 (defun prompt (&optional message)
@@ -308,7 +328,29 @@
   (format t "> ")
   (force-output))
 
+(defun format-triple (stream triple entry)
+  (multiple-value-bind (other-entry position) (complement-entry entry triple)
+    (multiple-value-bind (content cut?) (string-cut (content other-entry) 80)
+      (case position
+	(:subject
+	 (format stream "~a <- ~a~:[~;...~]" (pred triple) content cut?))
+	(:object
+	 (format stream "~a -> ~a~:[~;...~]" (pred triple) content cut?))))))
+
+(defun print-entry-info (entry)
+  (hr)
+  (write-string (content entry))
+  (let* ((to (subject-of entry))
+	 (from (object-of entry)))
+    (when (or to from) (hr))
+    (dolist (triple to)
+      (format t "~a~%" (format-triple nil triple entry)))
+    (when (and to from) (terpri))
+    (dolist (triple from)
+      (format t "~a~%" (format-triple nil triple entry)))))
+
 (defun menu (alist)
+  (fresh-line)
   (hr)
   (dolist (item alist) (format t "[ ~a ] ~a~%" (car item) (cdr item)))
   (prompt)
@@ -321,22 +363,76 @@
   `(case (menu ',(loop for x in cases collect (cons (caar x) (cadar x))))
      ,@(loop for x in cases collect `(,(caar x) ,@(cdr x)))))
 
+(defun select-triple-menu (entry &key (subject? t) (object? t))
+  (let* ((triples (loop for triple in (append (when subject? (subject-of entry))
+					      (when object? (object-of entry)))
+			counting 1 into index
+			collect (cons index
+				      (list :triple triple
+					    :string (format-triple nil triple entry)))))
+	 (items (loop for triple in triples
+		      collect (cons (prin1-to-string (car triple))
+				    (getf (cdr triple) :string))))
+	 (input (menu (append items '(("C" . "Cancel"))))))
+    (unless (string-equal input "C")
+      (let ((index (read-from-string input)))
+	(getf (cdr (assoc index triples :test #'eql)) :triple)))))
+
 (defun entry-menu (entry)
-  (case-menu
-    (("E" "Edit entry") (edit-entry entry) (entry-menu entry))
-    (("M" "Main menu") (main-menu))
-    (("Q" "Quit") (exit))))
+  (print-entry-info entry)
+  (case (menu (remove nil (list (cons "E" "Edit entry")
+				(when (or (subject-of entry)
+					  (object-of entry))
+				  (cons "N" "Navigation"))
+				(cons "+" "Add property")
+				(when (subject-of entry)
+				  (cons "-" "Delete property"))
+				(cons "D" "Delete entry")
+				(cons "L" "Back"))))
+    ("E"
+     (edit-entry entry)
+     (entry-menu entry))
+
+    ("N"
+     (format t "Select triple:~%")
+     (entry-menu (complement-entry entry (select-triple-menu entry))))
+
+    ("+"
+     (ensure-triple
+      (list (id entry)
+	    (progn (prompt "Predicate:") (read-line))
+	    (progn (prompt "Object:") (id (ensure-entry (read-line))))))
+     (entry-menu entry))
+
+    ("-"
+     (hr)
+     (format t "Select property to delete:~%")
+     (let ((triple (select-triple-menu entry :object? nil)))
+       (when triple
+	 (hr)
+	 (format t "Selected: ~s~%" (format-triple nil triple entry))
+	 (hr)
+	 (when (y-or-n-p "Delete this property?")
+	   (del-triple triple))))
+     (entry-menu entry))
+
+    ("D"
+     (when (y-or-n-p "Delete entry?")
+       (del-entry entry)))))
 
 (defun main-menu ()
   (case-menu
 
     (("I" "Create entry here")
-     (prompt "NEW ENTRY:~%")
-     (entry-menu (ensure-entry (read-multiline))))
+     (prompt "New entry:~%")
+     (entry-menu (ensure-entry (read-multiline)))
+     (main-menu))
 
     (("E" "Create entry in editor")
-     (entry-menu (ensure-entry (edit-string-in-program))))
+     (entry-menu (ensure-entry (edit-string-in-program)))
+     (main-menu))
 
-    (("Q" "Quit") (exit))))
+    (("Q" "Quit")
+     (exit))))
 
 (defun run () (main-menu))
