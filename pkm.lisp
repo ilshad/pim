@@ -355,25 +355,34 @@
   (format t "> ")
   (force-output))
 
-(defun read-menu-input (alist)
+(defun read-menu-input (options)
   (prompt)
   (let* ((input (string-trim '(#\Space) (read-line)))
-	 (result (car (assoc input alist :test #'string-equal))))
+	 (result (car (assoc input options :test #'string-equal))))
     (if result
 	(progn
 	  (terpri)
-	  result)
+	  (when (not (string= result ""))
+	    result))
 	(progn (format t "Unexpected option: ~a~%" input)
-	       (read-menu-input alist)))))
+	       (read-menu-input options)))))
 
-(defun menu (alist)
+(defun menu (options &key empty-option)
   (fresh-line)
   (hr)
-  (dolist (item alist)
-    (if (eq :separator (car item))
-	(hr)
-	(format t "[ ~a ] ~a~%" (car item) (cdr item))))
-  (read-menu-input alist))
+  (let ((options (append options
+			 (when empty-option
+			   (list (cons "" empty-option))))))
+    (dolist (item options)
+      (if (eq :separator (car item))
+	  (hr)
+	  (format t "[ ~a ] ~a~%"
+		  (let ((option (car item)))
+		    (if (string= option "")
+			" "
+			option))
+		  (cdr item))))
+    (read-menu-input options)))
 
 (defmacro case-menu (&body cases)
   `(case (menu ',(loop for x in cases collect (cons (caar x) (cadar x))))
@@ -387,16 +396,18 @@
 	(:obj (format stream "~a~:[~;...~] : ~a ->" content cut? (pred triple)))))))
 
 (defun menu-items-triples (entry)
-  (let ((indexed-triples (loop for triple in (search-triples nil nil nil (id entry))
-			       counting 1 into index
-			       collect (cons index triple))))
+  (let ((indexed-triples
+	  (loop for triple in (search-triples nil nil nil (id entry))
+		counting 1 into index
+		collect (cons index triple))))
+
     (list :indexed-triples
 	  indexed-triples
 
 	  :menu-items-triples
-	  (loop for triple in indexed-triples
-		collect (cons (prin1-to-string (car triple))
-			      (format-triple nil (cdr triple) entry))))))
+	  (loop for item in indexed-triples
+		collect (cons (prin1-to-string (car item))
+			      (format-triple nil (cdr item) entry))))))
 
 (defun selected-triple (index indexed-triples)
   (cdr (assoc index indexed-triples :test #'eql)))
@@ -462,6 +473,38 @@
 			 (del-triple triple))))))
 	     (entry-menu entry)))))))
 
+(defun pagination (size source &optional (result nil))
+  (let ((x (first source)))
+    (or (when (and x (< (length result) size))
+	  (pagination size (rest source) (cons x result)))
+	(list :page (reverse result) :rest source))))
+
+(defun list-entries-menu ()
+  (let ((ids (loop for id being the hash-keys in *entries* collect id)))
+    (loop
+      (if ids
+	  (destructuring-bind (&key page rest) (pagination 10 ids)
+	    (setf ids rest)
+	    (let* ((indexed-ids (loop for id in page
+				      counting 1 into index
+				      collect (cons index id)))
+		   (options (append
+			     (loop for item in indexed-ids
+				   collect
+				   (cons (prin1-to-string (car item))
+					 (string-cut
+					  (content (get-entry (cdr item)))
+					  80)))
+			     (list (cons "C" "Cancel"))))
+		   (input (menu options :empty-option "...more")))
+              (when input
+		(if (string= input "C")
+		    (return)
+		    (let* ((index (read-from-string input))
+			   (id (cdr (assoc index indexed-ids :test #'eql))))
+		      (return (get-entry id)))))))
+	  (return)))))
+
 (defun main-menu ()
   (case-menu
 
@@ -472,6 +515,11 @@
 
     (("E" "Create entry in editor")
      (entry-menu (ensure-entry (edit-string-in-program)))
+     (main-menu))
+
+    (("S" "List entries")
+     (let ((entry (list-entries-menu)))
+       (when entry (entry-menu entry)))
      (main-menu))
 
     (("Q" "Quit")
