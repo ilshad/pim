@@ -51,15 +51,14 @@
   (gethash id *entries*))
 
 (defun set-entry-content (entry new-content)
-  (with-slots (id content) entry
-    (let ((triples-before (search-triples id nil nil))
-	  (short-before (and (short? content) (copy-seq content))))
+  (with-slots (content) entry
+    (let ((short-before (and (short? content) (copy-seq content))))
       (setf content new-content)
       (update-short entry short-before)
-      (run-handlers entry triples-before))))
+      (run-handlers entry))))
 
 (defun del-entry (entry)
-  (dolist (triple (search-triples (id entry) nil nil))
+  (dolist (triple (search-triples nil nil nil (id entry)))
     (del-triple triple))
   (when (get-short (content entry))
     (del-short (content entry)))
@@ -181,6 +180,26 @@
      (values (get-entry (subj triple)) :obj))))
 
 ;;
+;; Properties
+;;
+
+(defun add-property-triple (entry key value)
+  (ensure-triple (list (id entry) key (id (ensure-entry value)))))
+
+(defun get-property-triple (entry key value)
+  (let ((property-entry (get-short value)))
+    (when property-entry
+      (get-triple (list (id entry) key (id property-entry))))))
+
+(defun get-property-triples (entry key)
+  (search-triples (id entry) key))
+
+(defun del-property-triple (entry key value)
+  (let ((property-entry (get-short value)))
+    (when property-entry
+      (del-triple (list (id entry) key (id property-entry))))))
+
+;;
 ;; Handlers
 ;;
 
@@ -203,77 +222,30 @@
   (setf *sorted-handlers* (reverse *sorted-handlers*)))
 
 (defmacro define-handler (name deps args &body body)
-  "Create handler function that runs when an entry has been created or updated.
+  "Create a handler function that runs when the entry has been
+   created or updated.
 
-   For example, extract things from the content and create default triples,
-   or define additional interaction with user.
+   For example, extract things from the content and create default
+   triples, or define additional interactions with user.
 
-   A handler can rely on the results of other handlers. For that, handlers
-   declare dependencies between each other, so they will run sorted according
-   to these dependencies.
+   A handler can rely on side effects of other handlers. For that,
+   handlers declare dependencies between each other, so they will
+   run sorted according to these dependencies.
 
-   The function, created by this macro, takes:
-
-   - alist (association list), which accumulates the results of all handlers,
-   - the entry.
-
-   It returns results alist, possibly updated.
-
-   In other words, the results alist is passing through all the handlers.
-   Each handler can update the results alist, adding its own result and
-   even modifying or dismissing the results of other handlers.
-
-   The result is a plist (property list):
-
-   - :triple   - single triple
-   - :triples  - list of triples
-   - :response - response to UI.
-
-   Assoc it into results alist using handler's name as a key:
-
-   (acons 'my-handler
-          (list :triple my-triple
-                :response my-response)
-          results)
-
+   The function, created by this macro, takes the entry it runs for.
+                
    Macro parameters:
 
-   - handler name (a symbol);
-   - dependencies - list of handler names (symbols);
-   - lambda list of function parameters:
-     - results alist,
-     - the entry.
-
-   Return: results alist."
+   - handler symbol;
+   - dependencies - list of handler symbols;
+   - function arguments - entry."
   `(progn
      (add-handler (quote ,name) (quote ,deps))
      (defun ,name ,args ,@body)))
 
-(defun reduce-over-handlers (entry)
-  (reduce #'(lambda (results symbol)
-	      (funcall (symbol-function symbol)
-		       results
-		       entry))
-	  *sorted-handlers*
-	  :initial-value nil))
-
-(defun run-handlers (entry &optional triples-before)
-  (let ((triples-after))
-    (dolist (result (reduce-over-handlers entry))
-      (format t "(i) ~s for #~s: ~s~%" (car result) (id entry) (cdr result))
-      (destructuring-bind (&key triple triples) (cdr result)
-	(when triple
-	  (setf triples-after (append triples-after (list triple))))
-	(when triples
-	  (setf triples-after (append triples-after triples)))))
-    (dolist (triple (set-difference triples-before triples-after :test #'equalp))
-      (del-triple triple))
-    (dolist (triple triples-after)
-      (ensure-triple triple))))
-
-(defun find-triples-by-handler (symbol results)
-  (or (getf (cdr (assoc symbol results)) :triple)
-      (getf (cdr (assoc symbol results)) :triples)))
+(defun run-handlers (entry)
+  (dolist (symbol *sorted-handlers*)
+    (funcall (symbol-function symbol) entry)))
 
 ;;
 ;; Default handlers
@@ -282,33 +254,29 @@
 (defun url? (string)
   (not (zerop (ppcre:count-matches "^https?:\\/\\/\\S+$" string))))
 
-(define-handler type-url () (results entry)
-  "If the content is a URL string, then create triple:
-   - this entry,
-   - predicate 'type',
-   - entry with content 'URL' (create if it doesn't exist yet)."
+(define-handler type-url () (entry)
+  "If the whole content string is a URL, create propery 'type' 'URL'."
   (if (url? (content entry))
-      (let ((triple (list (id entry) "type" (id (ensure-entry "URL")))))
-	(acons 'type-url (list :triple triple) results))
-      results))
+      (add-property-triple entry "type" "URL")
+      (when (get-property-triple entry "type" "URL")
+	(del-property-triple entry "type" "URL"))))
 
 (defun find-urls (string)
   (ppcre:all-matches-as-strings "(https?:\\/\\/\\S+\\w)+" string))
 
-(define-handler extract-urls (type-url) (results entry)
+(define-handler extract-urls (type-url) (entry)
   "1. Extract all URLs from the content.
    2. Create or find entries for each URL.
-   3. Create triples:
-      - this entry
-      - predicate 'url',
-      - the entry of the extracted URL."
-  (if (null (find-triples-by-handler 'type-url results))
-      (let ((triples (loop for url in (find-urls (content entry))
-			   collect (list (id entry) "url" (id (ensure-entry url))))))
-	(if triples
-	    (acons 'extract-urls (list :triples triples) results)
-	    results))
-      results))
+   3. Create property 'url' [extraced URL].
+   4. Remove old 'url' properties which are not applied now."
+  (when (null (get-property-triple entry "type" "URL"))
+    (let ((before (get-property-triples entry "url"))
+	  (after (loop for url in (find-urls (content entry))
+		       collect (list (id entry) "url" (id (ensure-entry url))))))
+      (dolist (triple (set-difference before after :test #'equalp))
+	(del-triple triple))
+      (dolist (triple (set-difference after before :test #'equalp))
+	(add-triple triple)))))
 
 ;;
 ;; Edit content in CLI
@@ -427,7 +395,7 @@
 			  (cons "D" "Delete entry")
 			  (cons "+" "Add triple for this subject")
 			  (when indexed-triples (cons "-" "Delete triple"))
-			  (cons "L" "Back")))
+			  (cons "Q" "Quit")))
 	   (input (menu (append menu-items-triples
 				(when menu-items-triples '((:separator)))
 				(remove nil actions))))
@@ -473,36 +441,34 @@
 			 (del-triple triple))))))
 	     (entry-menu entry)))))))
 
-(defun pagination (size source &optional (result nil))
-  (let ((x (first source)))
-    (or (when (and x (< (length result) size))
-	  (pagination size (rest source) (cons x result)))
-	(list :page (reverse result) :rest source))))
+(defparameter *page-size* 10)
 
 (defun list-entries-menu ()
   (let ((ids (loop for id being the hash-keys in *entries* collect id)))
     (loop
       (if ids
-	  (destructuring-bind (&key page rest) (pagination 10 ids)
-	    (setf ids rest)
-	    (let* ((indexed-ids (loop for id in page
-				      counting 1 into index
-				      collect (cons index id)))
-		   (options (append
-			     (loop for item in indexed-ids
-				   collect
-				   (cons (prin1-to-string (car item))
-					 (string-cut
-					  (content (get-entry (cdr item)))
-					  80)))
-			     (list (cons "C" "Cancel"))))
-		   (input (menu options :empty-option "...more")))
-              (when input
-		(if (string= input "C")
-		    (return)
-		    (let* ((index (read-from-string input))
-			   (id (cdr (assoc index indexed-ids :test #'eql))))
-		      (return (get-entry id)))))))
+	  (let* ((page? (> (length ids) *page-size*))
+		 (page (if page? (subseq ids 0 *page-size*) ids))
+		 (indexed-ids (loop for id in page
+				    counting 1 into index
+				    collect (cons index id)))
+		 (options (append
+			   (loop for item in indexed-ids
+				 collect
+				 (cons (prin1-to-string (car item))
+				       (string-cut
+					(content (get-entry (cdr item)))
+					80)))
+			   (when page? (list (cons "C" "Cancel")))))
+		 (input (menu options :empty-option (if page? "...more" "Done."))))
+	    (if input
+	      (if (string= input "C")
+		  (return)
+		  (let* ((index (read-from-string input))
+			 (id (cdr (assoc index indexed-ids :test #'eql))))
+		    (return (get-entry id))))
+	      (when (not page?)	(return)))
+	    (setf ids (when page? (subseq ids *page-size*))))
 	  (return)))))
 
 (defun main-menu ()
@@ -517,7 +483,7 @@
      (entry-menu (ensure-entry (edit-string-in-program)))
      (main-menu))
 
-    (("S" "List entries")
+    (("S" "Search / list entries")
      (let ((entry (list-entries-menu)))
        (when entry (entry-menu entry)))
      (main-menu))
