@@ -27,35 +27,21 @@
 	(values (subseq string 0 length) t)
 	string)))
 
-(defun prepare-content (string)
-  (string-trim '(#\Space #\Newline) string))
-
 (defun make-entry (content)
   (let ((entry (make-instance 'entry :content content)))
     (format t "(i) New entry ~s~%" entry)
     (setf (gethash (id entry) *entries*) entry)
-    (update-short entry)
     (run-handlers entry)
-    entry))
-
-(defun ensure-entry (string &key triples)
-  (let* ((content (prepare-content string))
-	 (entry (or (get-short content) (make-entry content))))
-    (dolist (cons triples)
-      (ensure-triple (list (id entry)
-			   (car cons)
-			   (id (ensure-entry (cdr cons))))))
     entry))
 
 (defun get-entry (id)
   (gethash id *entries*))
 
-(defun set-entry-content (entry new-content)
+(defun edit-entry (entry new-content)
   (with-slots (content) entry
-    (let ((short-before (and (short? content) (copy-seq content))))
+    (let ((content-before (copy-seq content)))
       (setf content new-content)
-      (update-short entry short-before)
-      (run-handlers entry))))
+      (run-handlers entry (list :content-before content-before)))))
 
 (defun del-entry (entry)
   (dolist (triple (search-triples nil nil nil (id entry)))
@@ -63,40 +49,6 @@
   (when (get-short (content entry))
     (del-short (content entry)))
   (remhash (id entry) *entries*))
-
-;;
-;; Shorts
-;;
-
-(defvar *shorts* (make-hash-table :test 'equalp))
-
-(defun short? (string)
-  (and (null (find #\Newline string))
-       (or (null (find-urls string))
-	   (url? string))))
-
-(defun get-short (content)
-  (when (short? content)
-    (let ((id (gethash content *shorts*)))
-      (when id
-	(let ((entry (get-entry id)))
-	  (format t "(i) Found short: ~s~%" entry)
-	  entry)))))
-
-(defun update-short (entry &optional short-content-before)
-  (with-slots (id content) entry
-    (let ((short? (short? content)))
-      (cond
-	((and short? (not short-content-before))
-	 (setf (gethash content *shorts*) id)
-	 (format t "(i) Added to shorts: ~s~%" entry))
-
-	((and (not short?) short-content-before)
-	 (when (remhash short-content-before *shorts*)
-	   (format t "(i) Removed from shorts: ~s~%" entry)))))))
-
-(defun del-short (content)
-  (remhash content *shorts*))
 
 ;;
 ;; Triples
@@ -179,12 +131,21 @@
     ((= (id entry) (obj triple))
      (values (get-entry (subj triple)) :obj))))
 
+(defun format-triple (stream triple entry)
+  (multiple-value-bind (other-entry position) (complement-entry entry triple)
+    (multiple-value-bind (content cut?) (string-cut (content other-entry) 80)
+      (case position
+	(:subj
+	 (format stream "-> ~a : ~a~:[~;...~]" (pred triple) content cut?))
+	(:obj
+	 (format stream "~a~:[~;...~] : ~a ->" content cut? (pred triple)))))))
+
 ;;
 ;; Properties
 ;;
 
 (defun add-property-triple (entry key value)
-  (ensure-triple (list (id entry) key (id (ensure-entry value)))))
+  (ensure-triple (list (id entry) key (id (ensure-short value)))))
 
 (defun get-property-triple (entry key value)
   (let ((property-entry (get-short value)))
@@ -243,19 +204,57 @@
      (add-handler (quote ,name) (quote ,deps))
      (defun ,name ,args ,@body)))
 
-(defun run-handlers (entry)
+(defun run-handlers (entry &optional context)
   (dolist (symbol *sorted-handlers*)
-    (funcall (symbol-function symbol) entry)))
+    (funcall (symbol-function symbol) entry context)))
 
 ;;
 ;; Default handlers
 ;;
 
+(defvar *shorts* (make-hash-table :test 'equalp))
+
+(defun ensure-short (string)
+  (let ((content (string-trim '(#\Space #\Newline) string)))
+    (or (get-short content) (make-entry content))))
+
+(defun short? (string)
+  (and (null (find #\Newline string))
+       (or (null (find-urls string))
+	   (url? string))))
+
+(defun get-short (content)
+  (when (short? content)
+    (let ((id (gethash content *shorts*)))
+      (when id
+	(let ((entry (get-entry id)))
+	  (format t "(i) Found short: ~s~%" entry)
+	  entry)))))
+
+(defun del-short (content)
+  (remhash content *shorts*))
+
+(define-handler short () (entry context)
+  "Shorts are entries, whose content can be used as identifiers, so
+   they are indexed additionally. A short entry is a one-line string,
+   usually a word or phrase, or URL. It's never created explicitly,
+   but only with a triple."
+  (with-slots (id (after content)) entry
+    (let ((before (getf context :content-before)))
+      (when (not (string= after before))
+	(when (short? after)
+	  (setf (gethash after *shorts*) id)
+	  (format t "(i) Added to shorts: ~s~%" entry))
+	(when (short? before)
+	  (when (remhash before *shorts*)
+	    (format t "(i) Removed from shorts: ~s~%" entry)))))))
+
 (defun url? (string)
   (not (zerop (ppcre:count-matches "^https?:\\/\\/\\S+$" string))))
 
-(define-handler type-url () (entry)
+(define-handler type-url () (entry context)
   "If the whole content string is a URL, create propery 'type' 'URL'."
+  (declare (ignore context))
   (if (url? (content entry))
       (add-property-triple entry "type" "URL")
       (when (get-property-triple entry "type" "URL")
@@ -264,15 +263,16 @@
 (defun find-urls (string)
   (ppcre:all-matches-as-strings "(https?:\\/\\/\\S+\\w)+" string))
 
-(define-handler extract-urls (type-url) (entry)
+(define-handler has-url (type-url) (entry context)
   "1. Extract all URLs from the content.
    2. Create or find entries for each URL.
    3. Create property 'url' [extraced URL].
    4. Remove old 'url' properties which are not applied now."
+  (declare (ignore context))
   (when (null (get-property-triple entry "type" "URL"))
-    (let ((before (get-property-triples entry "url"))
+    (let ((before (get-property-triples entry "has-url"))
 	  (after (loop for url in (find-urls (content entry))
-		       collect (list (id entry) "url" (id (ensure-entry url))))))
+		       collect (list (id entry) "has-url" (id (ensure-short url))))))
       (dolist (triple (set-difference before after :test #'equalp))
 	(del-triple triple))
       (dolist (triple (set-difference after before :test #'equalp))
@@ -356,13 +356,6 @@
   `(case (menu ',(loop for x in cases collect (cons (caar x) (cadar x))))
      ,@(loop for x in cases collect `(,(caar x) ,@(cdr x)))))
 
-(defun format-triple (stream triple entry)
-  (multiple-value-bind (other-entry position) (complement-entry entry triple)
-    (multiple-value-bind (content cut?) (string-cut (content other-entry) 80)
-      (case position
-	(:subj (format stream "-> ~a : ~a~:[~;...~]" (pred triple) content cut?))
-	(:obj (format stream "~a~:[~;...~] : ~a ->" content cut? (pred triple)))))))
-
 (defun menu-items-triples (entry)
   (let ((indexed-triples
 	  (loop for triple in (search-triples nil nil nil (id entry))
@@ -406,7 +399,7 @@
 	      (entry-menu (complement-entry entry triple))))
 	  (case input
 	    ("E"
-             (set-entry-content entry (edit-string-in-program (content entry)))
+             (edit-entry entry (edit-string-in-program (content entry)))
 	     (entry-menu entry))
 
 	    ("D"
@@ -424,7 +417,7 @@
 		      (let ((string (read-line)))
 			(terpri)
 			(or (parse-entry-id string)
-			    (id (ensure-entry string)))))))
+			    (id (ensure-short string)))))))
 	     (entry-menu entry))
 
 	    ("-"
@@ -454,11 +447,10 @@
 				    collect (cons index id)))
 		 (options (append
 			   (loop for item in indexed-ids
-				 collect
-				 (cons (prin1-to-string (car item))
-				       (string-cut
-					(content (get-entry (cdr item)))
-					80)))
+				 collect (cons (prin1-to-string (car item))
+					       (string-cut
+						(content (get-entry (cdr item)))
+						80)))
 			   (when page? (list (cons "C" "Cancel")))))
 		 (input (menu options :empty-option (if page? "...more" "Done."))))
 	    (if input
@@ -476,11 +468,11 @@
 
     (("I" "Create entry here")
      (prompt "New entry:~%")
-     (entry-menu (ensure-entry (read-multiline)))
+     (entry-menu (make-entry (read-multiline)))
      (main-menu))
 
     (("E" "Create entry in editor")
-     (entry-menu (ensure-entry (edit-string-in-program)))
+     (entry-menu (make-entry (edit-string-in-program)))
      (main-menu))
 
     (("S" "Search / list entries")
