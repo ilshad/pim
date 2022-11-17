@@ -200,30 +200,27 @@
 
    Interaction is a plist with following keys:
 
-   - :type (required) - keyword, one of :boolean, :string.
-   - :message (required) - string
-   - :function (required) - function
-   - :key - keyword
-   - :condition - function
+   - :msg - string
+   - :type - keyword, one of :boolean, :string.
+   - :fn - function
+   - :when (optional) - function
 
-   As a result, interaction shows :message and asks for input.
+   As a result, interaction shows :msg and asks for input depending
+   on :type keyword:
 
-   For :type :boolean, user interface asks for a boolean value
-   (e.g. yes or no). If yes, it calls the :function without arguments.
+   - :boolean - UI asks for a boolean value (e.g. yes / no),
+   - :string - UI asks for one-line string input.
 
-   For :type :string, user interface asks for one text line input and
-   calls :function with this string.
+   :fn function takes the user input and state, performs side effects
+   and returns the state (possibly updated). The state is a alist
+   (association list), where interactions can put their results
+   and get results of other interactions.
 
-   If :key is defined, the result of the :function will be put into
-   accumulated interactions results plist under this key.
-
-   If :condition function is defined, it is called with accumulated
-   interactions results plist. If it returns NIL, then skip this
-   interaction.
-
+   :when function takes the state and return boolean. If its
+   result is NIL, UI skips this interaction.
+        
    All interactions from handlers run sequentially after all the
-   handlers. With :key and :condition, interactions can check the
-   results of other interactions and run conditionally.
+   handlers, using the state alist to exchange their results.
    
    Macro parameters:
 
@@ -342,28 +339,37 @@
 	(interactions))
     (if title
 	(when (null (cdr (assoc title before :test #'string=)))
-	  (push (list :type :boolean
-		      :message (format nil "Set 'title' property ~s?" title)
-		      :function #'(lambda () (add-property-triple entry "title" title)))
+	  (push (list :msg (format nil "Set 'title' property ~s?" title)
+		      :type :boolean
+		      :fn #'(lambda (input state)
+			      (when input
+				(add-property-triple entry "title" title))
+			      state))
 		interactions))
 	(when (and (null before)
 		   (not (zerop (count #\Newline (content entry))))
 		   (not (string= (content entry) (getf context :content-before))))
-	  (push (list :type :boolean
-		      :message "Add title?"
-		      :key :add-title?
-		      :function (constantly t))
+	  (push (list :msg "Add title?"
+		      :type :boolean
+		      :fn #'(lambda (input state)
+			      (acons :add-title? input state)))
 		interactions)
-	  (push (list :type :string
-		      :message (format nil "Enter title:")
-		      :function #'(lambda (title) (add-property-triple entry "title" title))
-		      :condition #'(lambda (results) (getf results :add-title?)))
+	  (push (list :msg (format nil "Enter title:")
+		      :type :string
+		      :fn #'(lambda (input state)
+			      (add-property-triple entry "title" input)
+			      state)
+		      :when #'(lambda (state)
+				(cdr (assoc :add-title? state))))
 		interactions)))
     (dolist (cons before)
       (when (not (string= (car cons) title))
-	(push (list :type :boolean
-		    :message (format nil "Remove 'title' property ~s?" (car cons))
-		    :function #'(lambda () (del-triple (cdr cons))))
+	(push (list :msg (format nil "Remove 'title' property ~s?" (car cons))
+		    :type :boolean
+		    :fn #'(lambda (input state)
+			    (when input
+			      (del-triple (cdr cons)))
+			    state))
 	      interactions)))
     interactions))
 
@@ -475,23 +481,18 @@
   (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))
     (when found (parse-integer (subseq (first found) 1)))))
 
+(defun cli-input (type msg)
+  (case type
+    (:boolean (funcall #'y-or-n-p msg))
+    (:string (prompt (format t "~a~%" msg)) (read-line))))
+
 (defun cli-interactions (interactions)
-  (let ((results))
+  (let ((state))
     (dolist (interaction interactions)
       (terpri)
-      (destructuring-bind (&key condition type message function key) interaction
-       	(when (or (null condition) (funcall condition results))
-	  (case type
-
-	    (:boolean
-	     (when (funcall #'y-or-n-p message)
-	       (let ((result (funcall function)))
-		 (when key (setf (getf results key) result)))))
-
-	    (:string
-	     (prompt (format t "~a~%" message))
-	     (let ((result (funcall function (read-line))))
-	       (when key (setf (getf results key) result))))))))))
+      (destructuring-bind (&key when fn msg type) interaction
+       	(when (or (null when) (funcall when state))
+	  (setf state (funcall fn (cli-input type msg) state)))))))
 
 (defun cli-entry (entry)
   (terpri)
