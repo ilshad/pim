@@ -200,10 +200,10 @@
 
    Interaction is a plist with following keys:
 
-   - :msg - string
    - :type - keyword, one of :boolean, :string.
-   - :fn - function
-   - :when (optional) - function
+   - :msg - string or function that takes state and returns string
+   - :fn - function that takes input and state, returns state
+   - :when (optional) - function that takes state and returns boolean
 
    As a result, interaction shows :msg and asks for input depending
    on :type keyword:
@@ -339,8 +339,8 @@
 	(interactions))
     (if title
 	(when (null (cdr (assoc title before :test #'string=)))
-	  (push (list :msg (format nil "Set 'title' property ~s?" title)
-		      :type :boolean
+	  (push (list :type :boolean
+		      :msg (format nil "Set 'title' property ~s?" title)
 		      :fn #'(lambda (input state)
 			      (when input
 				(add-property-triple entry "title" title))
@@ -349,13 +349,13 @@
 	(when (and (null before)
 		   (not (zerop (count #\Newline (content entry))))
 		   (not (string= (content entry) (getf context :content-before))))
-	  (push (list :msg "Add title?"
-		      :type :boolean
+	  (push (list :type :boolean
+		      :msg "Add title?"
 		      :fn #'(lambda (input state)
 			      (acons :add-title? input state)))
 		interactions)
-	  (push (list :msg (format nil "Enter title:")
-		      :type :string
+	  (push (list :type :string
+		      :msg (format nil "Enter title:")
 		      :fn #'(lambda (input state)
 			      (add-property-triple entry "title" input)
 			      state)
@@ -364,8 +364,8 @@
 		interactions)))
     (dolist (cons before)
       (when (not (string= (car cons) title))
-	(push (list :msg (format nil "Remove 'title' property ~s?" (car cons))
-		    :type :boolean
+	(push (list :type :boolean
+		    :msg (format nil "Remove 'title' property ~s?" (car cons))
 		    :fn #'(lambda (input state)
 			    (when input
 			      (del-triple (cdr cons)))
@@ -481,10 +481,15 @@
   (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))
     (when found (parse-integer (subseq (first found) 1)))))
 
-(defun cli-input (type msg)
+(defun cli-message (msg state)
+  (if (functionp msg)
+      (funcall msg state)
+      msg))
+
+(defun cli-input (type message)
   (case type
-    (:boolean (funcall #'y-or-n-p msg))
-    (:string (prompt (format t "~a~%" msg)) (read-line))))
+    (:boolean (funcall #'y-or-n-p message))
+    (:string (prompt (format t "~a~%" message)) (read-line))))
 
 (defun cli-interactions (interactions)
   (let ((state))
@@ -492,7 +497,8 @@
       (terpri)
       (destructuring-bind (&key when fn msg type) interaction
        	(when (or (null when) (funcall when state))
-	  (setf state (funcall fn (cli-input type msg) state)))))))
+	  (let ((message (cli-message msg state)))
+	    (setf state (funcall fn (cli-input type message) state))))))))
 
 (defun cli-entry (entry)
   (terpri)
