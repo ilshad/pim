@@ -186,30 +186,33 @@
    created or updated.
 
    For example, extract things from the content and create default
-   triples, or define additional interactions with user.
+   triples and define additional interactions with user.
 
    A handler can rely on side effects of other handlers. For that,
    handlers declare dependencies between each other, so they will
    run sorted according to these dependencies.
 
    The function, created by this macro, takes the entry it runs for
-   and returns nil or list of UI interactions.
+   and 'context' plist. It returns nil or list of UI interactions.
+
+   Context plist contains following keys:
+   - :content-before - previous entry content string, if there was one.
 
    Interaction is a plist with following keys:
 
    - :type (required) - keyword, one of :boolean, :string.
-   - :prompt (required) - string
+   - :message (required) - string
    - :function (required) - function
    - :key - keyword
    - :condition - function
 
-   As a result, interaction shows :prompt and asks for the input.
+   As a result, interaction shows :message and asks for input.
 
-   For :type :boolean, user interface asks boolean value (e.g. yes or no).
-   If yes, it calls the :function without arguments.
+   For :type :boolean, user interface asks for a boolean value
+   (e.g. yes or no). If yes, it calls the :function without arguments.
 
-   For :type :string, user interface asks one text line input and calls
-   :function with this string.
+   For :type :string, user interface asks for one text line input and
+   calls :function with this string.
 
    If :key is defined, the result of the :function will be put into
    accumulated interactions results plist under this key.
@@ -226,7 +229,9 @@
 
    - handler symbol;
    - dependencies - list of handler symbols;
-   - function arguments - entry.
+   - function arguments:
+       - entry,
+       - context.
 
    Returns: nil of list of interactions."
   `(progn
@@ -246,22 +251,25 @@
 
 (defvar *shorts* (make-hash-table :test 'equalp))
 
-(defun ensure-short (string)
-  (let ((content (string-trim '(#\Space #\Newline) string)))
-    (or (get-short content) (make-entry content))))
-
-(defun short? (string)
+(defun short-content? (string)
   (and (null (find #\Newline string))
        (or (null (find-urls string))
 	   (url? string))))
 
+(defun short? (entry)
+  (not (null (gethash (content entry) *shorts*))))
+
 (defun get-short (content)
-  (when (short? content)
+  (when (short-content? content)
     (let ((id (gethash content *shorts*)))
       (when id
 	(let ((entry (get-entry id)))
 	  (format t "(i) Found short: ~s~%" entry)
 	  entry)))))
+
+(defun ensure-short (string)
+  (let ((content (string-trim '(#\Space #\Newline) string)))
+    (or (get-short content) (make-entry content))))
 
 (defun del-short (content)
   (remhash content *shorts*))
@@ -274,10 +282,10 @@
   (with-slots (id (after content)) entry
     (let ((before (getf context :content-before)))
       (when (not (string= after before))
-	(when (short? after)
+	(when (short-content? after)
 	  (setf (gethash after *shorts*) id)
 	  (format t "(i) Added to shorts: ~s~%" entry))
-	(when (short? before)
+	(when (short-content? before)
 	  (when (remhash before *shorts*)
 	    (format t "(i) Removed from shorts: ~s~%" entry)))))))
 
@@ -299,7 +307,7 @@
   "1. Extract all URLs from the content.
    2. Create or find entries for each URL.
    3. Create property 'url' [extraced URL].
-   4. Remove old 'url' properties which are not applied now."
+   4. Remove old 'url' properties which are not applicable now."
   (declare (ignore context))
   (when (null (get-property-triple entry "type" "URL"))
     (let ((before (get-property-triples entry "has-url"))
@@ -326,7 +334,7 @@
 (define-handler set-title () (entry context)
   "If first line is separated from the rest content by an empty line,
    then interactively create 'title' property using this line.
-   Otherwise prompt to user to set the title explicitly or skip.
+   Otherwise prompt to user to set the title explicitly or to skip.
    Also interactively take care of old 'title' properties, if such
    triples are exist."
   (let ((title (extract-title (content entry)))
@@ -335,26 +343,26 @@
     (if title
 	(when (null (cdr (assoc title before :test #'string=)))
 	  (push (list :type :boolean
-		      :prompt (format nil "Set 'title' property ~s?" title)
+		      :message (format nil "Set 'title' property ~s?" title)
 		      :function #'(lambda () (add-property-triple entry "title" title)))
 		interactions))
 	(when (and (null before)
 		   (not (zerop (count #\Newline (content entry))))
 		   (not (string= (content entry) (getf context :content-before))))
 	  (push (list :type :boolean
-		      :prompt "Add title?"
+		      :message "Add title?"
 		      :key :add-title?
 		      :function (constantly t))
 		interactions)
 	  (push (list :type :string
-		      :prompt (format nil "Enter title:")
+		      :message (format nil "Enter title:")
 		      :function #'(lambda (title) (add-property-triple entry "title" title))
 		      :condition #'(lambda (results) (getf results :add-title?)))
 		interactions)))
     (dolist (cons before)
       (when (not (string= (car cons) title))
 	(push (list :type :boolean
-		    :prompt (format nil "Remove 'title' property ~s?" (car cons))
+		    :message (format nil "Remove 'title' property ~s?" (car cons))
 		    :function #'(lambda () (del-triple (cdr cons))))
 	      interactions)))
     interactions))
@@ -378,6 +386,15 @@
     (write-string string out))
   (uiop:run-program (editor-program-cmd))
   (uiop:read-file-string *content-filename*))
+
+(defun trim-if-one-liner (string)
+  (let ((first-newline (position #\Newline string)))
+    (if first-newline
+	(let ((rest-string (subseq string first-newline)))
+	  (if (zerop (length (string-trim '(#\Newline #\Space) rest-string)))
+	      (string-right-trim '(#\Newline #\Space) string)
+	      string))
+	string)))
 
 (defun read-multiline ()
   (let ((empty-lines-counter 0))
@@ -416,7 +433,7 @@
 	(progn (format t "Unexpected option: ~a~%" input)
 	       (read-menu-input options)))))
 
-(defun menu (options &key empty-option)
+(defun cli-menu (options &key empty-option)
   (fresh-line)
   (hr)
   (let ((options (append options
@@ -433,8 +450,8 @@
 		  (cdr item))))
     (read-menu-input options)))
 
-(defmacro case-menu (&body cases)
-  `(case (menu ',(loop for x in cases collect (cons (caar x) (cadar x))))
+(defmacro cli-menu-case (&body cases)
+  `(case (cli-menu ',(loop for x in cases collect (cons (caar x) (cadar x))))
      ,@(loop for x in cases collect `(,(caar x) ,@(cdr x)))))
 
 (defun menu-items-triples (entry)
@@ -462,17 +479,17 @@
   (let ((results))
     (dolist (interaction interactions)
       (terpri)
-      (destructuring-bind (&key condition type prompt function key) interaction
+      (destructuring-bind (&key condition type message function key) interaction
        	(when (or (null condition) (funcall condition results))
 	  (case type
 
 	    (:boolean
-	     (when (funcall #'y-or-n-p prompt)
+	     (when (funcall #'y-or-n-p message)
 	       (let ((result (funcall function)))
 		 (when key (setf (getf results key) result)))))
 
 	    (:string
-	     (prompt (format t "~a~%" prompt))
+	     (prompt (format t "~a~%" message))
 	     (let ((result (funcall function (read-line))))
 	       (when key (setf (getf results key) result))))))))))
 
@@ -481,16 +498,16 @@
   (hr)
   (write-string (content entry))
   (hr)
-  (format t "ID: ~d~%" (id entry))
+  (format t "ID: ~d~:[~;, short.~]~%" (id entry) (short? entry))
   (destructuring-bind (&key indexed-triples menu-items-triples) (menu-items-triples entry)
     (let* ((actions (list (cons "E" "Edit entry")
 			  (cons "D" "Delete entry")
 			  (cons "+" "Add triple for this subject")
 			  (when indexed-triples (cons "-" "Delete triple"))
 			  (cons "Q" "Quit")))
-	   (input (menu (append menu-items-triples
-				(when menu-items-triples '((:separator)))
-				(remove nil actions))))
+	   (input (cli-menu (append menu-items-triples
+				    (when menu-items-triples '((:separator)))
+				    (remove nil actions))))
 	   (index (read-from-string input)))
       (if (integerp index)
 	  (let ((triple (selected-triple index indexed-triples)))
@@ -498,7 +515,8 @@
 	      (cli-entry (complement-entry entry triple))))
 	  (case input
 	    ("E"
-	     (cli-interactions (edit-entry entry (edit-string-in-program (content entry))))
+	     (let ((string (edit-string-in-program (content entry))))
+	       (cli-interactions (edit-entry entry (trim-if-one-liner string))))
 	     (cli-entry entry))
 
 	    ("D"
@@ -533,54 +551,68 @@
 			 (del-triple triple))))))
 	     (cli-entry entry)))))))
 
+(defun list-entries-ids ()
+  (loop for id being the hash-keys in *entries* using (hash-value entry)
+	when (not (short? entry))
+	collect id))
+
+(defun entry-title (entry)
+  (let ((property (first (get-property-triples entry "title"))))
+    (if property
+	(content (get-entry (obj property)))
+	(string-cut (content entry) 80))))
+
 (defparameter *page-size* 10)
 
-(defun list-entries-menu ()
-  (let ((ids (loop for id being the hash-keys in *entries* collect id)))
-    (loop
-      (if ids
-	  (let* ((page? (> (length ids) *page-size*))
-		 (page (if page? (subseq ids 0 *page-size*) ids))
-		 (indexed-ids (loop for id in page
-				    counting 1 into index
-				    collect (cons index id)))
-		 (options (append
-			   (loop for item in indexed-ids
-				 collect (cons (prin1-to-string (car item))
-					       (string-cut
-						(content (get-entry (cdr item)))
-						80)))
-			   (when page? (list (cons "C" "Cancel")))))
-		 (input (menu options :empty-option (if page? "...more" "Done."))))
-	    (if input
+(defun cli-list-entries (ids)
+  (loop
+    (if ids
+	(let* ((page? (> (length ids) *page-size*))
+	       (page (if page? (subseq ids 0 *page-size*) ids))
+	       (indexed-ids (loop for id in page
+				  counting 1 into index
+				  collect (cons index id)))
+	       (options (append
+			 (loop for item in indexed-ids
+			       collect (cons (prin1-to-string (car item))
+					     (entry-title (get-entry (cdr item)))))
+			 (when page? (list (cons "C" "Cancel")))))
+	       (input (cli-menu options :empty-option (if page? "...more" "Done."))))
+	  (if input
 	      (if (string= input "C")
 		  (return)
 		  (let* ((index (read-from-string input))
 			 (id (cdr (assoc index indexed-ids :test #'eql))))
 		    (return (get-entry id))))
 	      (when (not page?)	(return)))
-	    (setf ids (when page? (subseq ids *page-size*))))
-	  (return)))))
+	  (setf ids (when page? (subseq ids *page-size*))))
+	(return))))
 
 (defun cli-main ()
-  (case-menu
+  (cli-menu-case
 
     (("I" "Create entry here")
      (prompt "New entry:~%")
-     (multiple-value-bind (entry interactions) (make-entry (read-multiline))
-       (cli-interactions interactions)
-       (cli-entry entry))
+     (let ((input (string-trim '(#\Space #\Newline) (read-multiline))))
+       (multiple-value-bind (entry interactions) (make-entry input)
+	 (cli-interactions interactions)
+	 (cli-entry entry)))
      (cli-main))
 
     (("E" "Create entry in editor")
-     (multiple-value-bind (entry interactions) (make-entry (edit-string-in-program))
-       (cli-interactions interactions)
-       (cli-entry entry))
+     (let ((content (trim-if-one-liner (edit-string-in-program))))
+       (multiple-value-bind (entry interactions) (make-entry content)
+	 (cli-interactions interactions)
+	 (cli-entry entry)))
      (cli-main))
 
     (("S" "Search / list entries")
-     (let ((entry (list-entries-menu)))
-       (when entry (cli-entry entry)))
+     (let ((ids (list-entries-ids)))
+       (if ids
+	   (let ((entry (cli-list-entries (list-entries-ids))))
+	     (when entry
+	       (cli-entry entry)))
+	   (format t "Nothing to show")))
      (cli-main))
 
     (("Q" "Quit")
