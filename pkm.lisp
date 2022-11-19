@@ -509,6 +509,20 @@
     (:boolean (funcall #'y-or-n-p message))
     (:string (prompt (format t "~a~%" message)) (read-line))))
 
+(defun cli-interactions (interactions)
+  (let ((state))
+    (dolist (interaction interactions)
+      (terpri)
+      (destructuring-bind (&key when msg type key fn) interaction
+       	(when (or (null when)
+		  (if (keywordp when)
+		      (cdr (assoc when state))
+		      (funcall when state)))
+	  (let ((message (cli-message msg state))
+		(function (or fn #'(lambda (input state) (acons key input state)))))
+	    (setf state (funcall function (cli-input type message) state))))))
+    state))
+
 (defun cli-entry (entry)
   (terpri)
   (hr)
