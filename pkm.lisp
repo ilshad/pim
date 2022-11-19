@@ -1,3 +1,5 @@
+; (ql:quickload :cl-ppcre)
+
 (defpackage #:pkm (:use :common-lisp))
 
 (in-package #:pkm)
@@ -27,11 +29,11 @@
 	(values (subseq string 0 length) t)
 	string)))
 
-(defun make-entry (content)
+(defun make-entry (content &key short?)
   (let ((entry (make-instance 'entry :content content)))
     (format t "(i) New entry ~s~%" entry)
     (setf (gethash (id entry) *entries*) entry)
-    (values entry (run-handlers entry))))
+    (values entry (run-handlers entry (list :short? short?)))))
 
 (defun get-entry (id)
   (gethash id *entries*))
@@ -46,7 +48,7 @@
   (dolist (triple (search-triples nil nil nil (id entry)))
     (del-triple triple))
   (when (get-short (content entry))
-    (del-short (content entry)))
+    (del-short entry))
   (remhash (id entry) *entries*))
 
 ;;
@@ -135,9 +137,9 @@
     (multiple-value-bind (content cut?) (string-cut (content other-entry) 80)
       (case position
 	(:subj
-	 (format stream "-> ~a : ~a~:[~;...~]" (pred triple) content cut?))
+	 (format stream "-> ~a -> ~a~:[~;...~]" (pred triple) content cut?))
 	(:obj
-	 (format stream "~a~:[~;...~] : ~a ->" content cut? (pred triple)))))))
+	 (format stream "<- ~a <- ~a~:[~;...~]" (pred triple) content cut?))))))
 
 ;;
 ;; Properties
@@ -163,23 +165,23 @@
 ;; Handlers
 ;;
 
-(defparameter *handlers-deps* nil)
-(defparameter *sorted-handlers* nil)
+(defparameter *handlers-tmp* nil)
+(defparameter *handlers* nil)
 
 (defun sort-handlers (items &optional provided-item)
   (let ((item (or provided-item (first items))))
     (dolist (dep-name (cdr item))
       (let ((dep-item (assoc dep-name items)))
-	(when (and dep-item (not (member dep-item *sorted-handlers*)))
+	(when (and dep-item (not (member dep-item *handlers*)))
 	  (sort-handlers items dep-item))))
-    (pushnew (car item) *sorted-handlers*)
+    (pushnew (car item) *handlers*)
     (when (and (null provided-item) (rest items))
       (sort-handlers (rest items)))))
 
 (defun add-handler (name deps)
-  (setf *sorted-handlers* nil)
-  (sort-handlers (push (cons name deps) *handlers-deps*))
-  (setf *sorted-handlers* (reverse *sorted-handlers*)))
+  (setf *handlers* nil)
+  (sort-handlers (push (cons name deps) *handlers-tmp*))
+  (setf *handlers* (reverse *handlers*)))
 
 (defmacro define-handler (name deps args &body body)
   "Create a handler function that runs when the entry has been
@@ -202,8 +204,12 @@
 
    - :type - keyword, one of :boolean, :string.
    - :msg - string or function that takes state and returns string
+   - :key - keyword, to acons the input into the state
    - :fn - function that takes input and state, returns state
-   - :when (optional) - function that takes state and returns boolean
+   - :when - keyword or function that takes state and returns boolean
+
+   Keys :type, :msg are both required; :key and :fn - one of them
+   must be presented; :when is optional.
 
    As a result, interaction shows :msg and asks for input depending
    on :type keyword:
@@ -216,8 +222,13 @@
    (association list), where interactions can put their results
    and get results of other interactions.
 
-   :when function takes the state and return boolean. If its
-   result is NIL, UI skips this interaction.
+   :key simply puts the input into the state. This option can be used
+   instead of :fn if the only goal of the interaction is to provide
+   input that can be used in subsequent interactions.
+
+   :when - keyword or function. The function takes the state and returns
+   boolean. If its result is NIL, UI skips this interaction.
+   Keyword variant simply checks state for boolean value.
         
    All interactions from handlers run sequentially after all the
    handlers, using the state alist to exchange their results.
@@ -237,7 +248,7 @@
 
 (defun run-handlers (entry &optional context)
   (let ((interactions))
-    (dolist (symbol *sorted-handlers*)
+    (dolist (symbol *handlers*)
       (dolist (interacts (funcall (symbol-function symbol) entry context))
 	(when interacts (push interacts interactions))))
     interactions))
@@ -249,7 +260,8 @@
 (defvar *shorts* (make-hash-table :test 'equalp))
 
 (defun short-content? (string)
-  (and (null (find #\Newline string))
+  (and string
+       (null (find #\Newline string))
        (or (null (find-urls string))
 	   (url? string))))
 
@@ -266,25 +278,33 @@
 
 (defun ensure-short (string)
   (let ((content (string-trim '(#\Space #\Newline) string)))
-    (or (get-short content) (make-entry content))))
+    (or (get-short content) (make-entry content :short? t))))
 
-(defun del-short (content)
-  (remhash content *shorts*))
+(defun set-short (entry)
+  (setf (gethash (content entry) *shorts*) (id entry))
+  (format t "(i) Added to shorts: ~s~%" entry))
 
-(define-handler short () (entry context)
+(defun del-short (entry &optional content)
+  (let ((content (or content (content entry))))
+    (when (remhash content *shorts*)
+      (format t "(i) Removed from shorts: ~s~%" (string-cut content 20)))))
+
+(define-handler update-short () (entry context)
   "Shorts are entries, whose content can be used as identifiers, so
    they are indexed additionally. A short entry is a one-line string,
    usually a word or phrase, or URL. It's never created explicitly,
    but only with a triple."
-  (with-slots (id (after content)) entry
-    (let ((before (getf context :content-before)))
-      (when (not (string= after before))
-	(when (short-content? after)
-	  (setf (gethash after *shorts*) id)
-	  (format t "(i) Added to shorts: ~s~%" entry))
-	(when (short-content? before)
-	  (when (remhash before *shorts*)
-	    (format t "(i) Removed from shorts: ~s~%" entry)))))))
+  (let ((before (getf context :content-before))
+	(after (content entry)))
+    (when (not (string= before after))
+      (if (getf context :short?)
+	  (progn (when (short-content? before) (del-short entry before))
+		 (when (short-content? after) (set-short entry)))
+	  (when (and (short-content? before)
+		     (short-content? after)
+		     (not (string= before after)))
+	    (del-short entry before)
+	    (set-short entry))))))
 
 (defun url? (string)
   (not (zerop (ppcre:count-matches "^https?:\\/\\/\\S+$" string))))
@@ -351,16 +371,14 @@
 		   (not (string= (content entry) (getf context :content-before))))
 	  (push (list :type :boolean
 		      :msg "Add title?"
-		      :fn #'(lambda (input state)
-			      (acons :add-title? input state)))
+		      :key :add-title?)
 		interactions)
-	  (push (list :type :string
+	  (push (list :when :add-title?
+		      :type :string
 		      :msg (format nil "Enter title:")
 		      :fn #'(lambda (input state)
 			      (add-property-triple entry "title" input)
-			      state)
-		      :when #'(lambda (state)
-				(cdr (assoc :add-title? state))))
+			      state))
 		interactions)))
     (dolist (cons before)
       (when (not (string= (car cons) title))
@@ -491,15 +509,6 @@
     (:boolean (funcall #'y-or-n-p message))
     (:string (prompt (format t "~a~%" message)) (read-line))))
 
-(defun cli-interactions (interactions)
-  (let ((state))
-    (dolist (interaction interactions)
-      (terpri)
-      (destructuring-bind (&key when fn msg type) interaction
-       	(when (or (null when) (funcall when state))
-	  (let ((message (cli-message msg state)))
-	    (setf state (funcall fn (cli-input type message) state))))))))
-
 (defun cli-entry (entry)
   (terpri)
   (hr)
@@ -507,14 +516,14 @@
   (hr)
   (format t "ID: ~d~:[~;, short.~]~%" (id entry) (short? entry))
   (destructuring-bind (&key indexed-triples menu-items-triples) (menu-items-triples entry)
-    (let* ((actions (list (cons "E" "Edit entry")
+    (let* ((options (list (cons "E" "Edit entry")
 			  (cons "D" "Delete entry")
 			  (cons "+" "Add triple for this subject")
 			  (when indexed-triples (cons "-" "Delete triple"))
 			  (cons "Q" "Quit")))
 	   (input (cli-menu (append menu-items-triples
 				    (when menu-items-triples '((:separator)))
-				    (remove nil actions))))
+				    (remove nil options))))
 	   (index (read-from-string input)))
       (if (integerp index)
 	  (let ((triple (selected-triple index indexed-triples)))
@@ -595,30 +604,28 @@
 	  (setf ids (when page? (subseq ids *page-size*))))
 	(return))))
 
+(defun cli-create-entry (content)
+  (multiple-value-bind (entry interactions) (make-entry content)
+    (cli-interactions interactions)
+    (cli-entry entry)))
+
 (defun cli-main ()
   (cli-menu-case
 
     (("I" "Create entry here")
      (prompt "New entry:~%")
-     (let ((input (string-trim '(#\Space #\Newline) (read-multiline))))
-       (multiple-value-bind (entry interactions) (make-entry input)
-	 (cli-interactions interactions)
-	 (cli-entry entry)))
+     (cli-create-entry (string-trim '(#\Space #\Newline) (read-multiline)))
      (cli-main))
 
     (("E" "Create entry in editor")
-     (let ((content (trim-if-one-liner (edit-string-in-program))))
-       (multiple-value-bind (entry interactions) (make-entry content)
-	 (cli-interactions interactions)
-	 (cli-entry entry)))
+     (cli-create-entry (trim-if-one-liner (edit-string-in-program)))
      (cli-main))
 
     (("S" "Search / list entries")
      (let ((ids (list-entries-ids)))
        (if ids
 	   (let ((entry (cli-list-entries (list-entries-ids))))
-	     (when entry
-	       (cli-entry entry)))
+	     (when entry (cli-entry entry)))
 	   (format t "Nothing to show")))
      (cli-main))
 
