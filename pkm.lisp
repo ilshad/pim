@@ -184,66 +184,29 @@
   (setf *handlers* (reverse *handlers*)))
 
 (defmacro define-handler (name deps args &body body)
-  "Create a handler function that runs when the entry has been
-   created or updated.
+  "Create a Handler function that runs when the entry has been created
+   or updated.
 
-   For example, extract things from the content and create default
-   triples and define additional interactions with user.
+   For example, extract things from the content and create default triples
+   and define additional interactions with user.
 
-   A handler can rely on side effects of other handlers. For that,
-   handlers declare dependencies between each other, so they will
-   run sorted according to these dependencies.
+   Handler can rely on side effects of other handlers. For that, handlers
+   declare dependencies between each other, so they will run sorted according
+   to these dependencies.
 
-   The function, created by this macro, takes the entry it runs for
-   and 'context' plist. It returns nil or list of UI interactions.
-
-   Context plist contains following keys:
-   - :content-before - previous entry content string, if there was one.
-
-   Interaction is a plist with following keys:
-
-   - :type - keyword, one of :boolean, :string, :integer
-   - :message - string or function that takes state and returns string
-   - :key - keyword, to acons the input into the state
-   - :function - function that takes input and state, returns state
-   - :validation - function that takes input and state, returns boolean
-   - :when - keyword or function that takes state and returns boolean
-
-   As a result, interaction shows :message and asks for input depending
-   on :type keyword:
-
-   - :boolean - UI asks for a boolean value (e.g. yes / no),
-   - :string - UI asks for one-line string input.
-
-   :function takes the user input and state, performs side effects
-   and returns the state (possibly updated). The state is a alist
-   (association list), where interactions can put their results
-   and get results of other interactions.
-
-   :key simply puts the input into the state. This option can be used
-   instead of :function if the only goal of the interaction is to provide
-   input that can be used in subsequent interactions.
-
-   :when - keyword or function. The function takes the state and returns
-   boolean. If its result is NIL, UI skips this interaction.
-   Keyword variant simply checks state for boolean value.
-
-   If :type is not presented, interaction only shows the message.
-
-   If :validation function returns nil, UI asks for the input again.
-
-   All interactions from handlers run sequentially after all the
-   handlers, using the state alist to exchange their results.
-   
    Macro parameters:
 
-   - handler symbol;
-   - dependencies - list of handler symbols;
+   - handler name (symbol);
+   - dependencies - list of other handler names (symbols);
    - function arguments:
-       - entry,
-       - context.
+       - the entry it runs for,
+       - context plist, which contains:
+           - :content-before - previous entry content, if there was one.
 
-   Returns: nil of list of interactions."
+   Return NIL or list of Interactions. For more details about Interactions
+   see corresponding section in 'define-action' macro - they are exactly
+   the same. All Interactions from handlers run sequentially after all the
+   handlers, using the state alist to exchange their results."
   `(progn
      (add-handler (quote ,name) (quote ,deps))
      (defun ,name ,args ,@body)))
@@ -406,64 +369,215 @@
 	      :key #'cdr)))
 
 (defmacro define-action (name (view index) args &body body)
-  "Create action for particular view in UI in a way, that the action
-   is abstracted from actual UI, so it will appear in all frontends.
+  "The way to abstract user actions, such as buttons, links, menu items,
+   from concrete UI implementations. Once defined, action appears and works
+   in each frontend.
 
-   The function, created by this macro, takes context plist, passed
-   from frontend. The schema of context is specific for each view.
+   Macro params include a list containing a keyword (the name of the view
+   where the action must appear) and integer (index sorting actions).
 
-   It returns plist with following keys:
+   The function, created by this macro, takes context plist from view.
+   Each view defines its own specific context. For example, entry view
+   passes plist with the entry and data structures for navigation on
+   triples.
 
-   - :label
-   - :description
-   - :command
-   - :interactions - see documentation for 'define-handler, it's the same.
-   - :function
-   - :when
+   Return NIL (which means to skip this action) or a plist with the
+   following keys:
 
-  TBD"
-  (let ((symbol (read-from-string (concatenate 'string (symbol-name name) "-action"))))
+   - :label - string.
+   - :description - string.
+   - :command - for use in CLI frontend as a menu option, or as a part of
+                a keyboard shortcut in other frontends.
+   - :interactions - list of plists, see the corresponding section below.
+   - :function - main function of the action.
+   - :navigation - navigation spec or function that takes s returns navigation
+                   spec, defining where to redirect UI after this action.
+
+   If interactions are defined, the main function and navigation function
+   take the state built from these interactions. Otherwise, the main function
+   and navigation function take no arguments.
+
+   Main function is for side effects only. Its return value is always ignored.
+
+   Navigation can be specified as:
+
+   - a view name keyword;
+   - a list containing view name keyword and some identifier;
+   - a function that returns any of the variants shown above.
+
+   If navigation is not defined (or the navigation function returns NIL),
+   UI stays on the same view, where action has been called.
+
+   Overall, functions defined in action run in following order:
+
+   - interactions,
+   - main function,
+   - navigation.
+
+
+   Interactions
+   ************
+
+   Interactions is a way to abstract interactive dialogs, step-by-step
+   inputs and wizards, including conditional branching, from concrete
+   UI implementations. Once defined, interaction works in each frontend.
+
+   Interactions can be defined here, in actions, and in the handlers
+   (see macro 'define-handler'), as a sequence of plists.
+
+   Each interaction is a plist with following keys:
+
+   - :type - keyword, input type
+   - :message - string or function that takes state and returns string
+   - :key - keyword, to acons the input into the state
+   - :function - function that takes input and state, returns state
+   - :validate - predicate function that takes input and state
+   - :when - keyword or predicate function that takes state
+   - :content - function, only with :editor input type
+   - :newlines-submit - integer, only with :string input type
+   - :interactions - keyword pointing to nested interactions in the state
+
+   As a result, interaction shows :message and asks for input depending
+   on :type keyword:
+
+   - :boolean - UI asks for a boolean value (e.g. yes / no),
+   - :integer - UI asks for integer number,
+   - :string - UI asks for string input,
+   - :editor - UI opens text editor.
+
+   :content function takes state and return string, that becomes initial
+   content in text editor.
+
+   :newlines-submit is the number of subsequent newlines, after which
+   input type :string submits the input (these newlines will be trimmed).
+   Default is 0, which means single-line input. 
+
+   If :validate predicate is defined and it returns NIL, UI asks for the
+   input again.
+
+   :function takes the user input and state, performs side effects and
+   returns the state (possibly updated). The state is a alist (association
+   list), where interactions can put their results and query results of
+   other interactions.
+
+   The function, in turn, can dynamically define new (i.e. nested)
+   interactions. To perform them, it must put them into the state
+   under some key. Then property :interactions must refer to that key. 
+
+   :key simply puts the input into the state. This option can be used
+   instead of :function if the only goal of the interaction is to provide
+   input that can be used in subsequent interactions.
+
+   :when - keyword or function. The function takes the state and returns
+   boolean. If its result is NIL, UI skips this interaction. Keyword
+   variant simply checks state for that key.
+
+   If :type is not presented, interaction only shows the message."
+  (let ((symbol (read-from-string
+		 (concatenate 'string
+			      (symbol-name name) "-"
+			      (symbol-name view) "-action"))))
     `(progn
        (add-action (quote ,symbol) ,view ,index)
        (defun ,symbol ,args ,@body))))
 
-(defun view-actions (view context)
-  (let ((actions (mapcar #'(lambda (cons)
-			     (funcall (car cons) context))
-			 (getf *actions* view))))
-    (remove-if-not
-     #'(lambda (action)
-	 (let ((when-function (getf action :when)))
-	   (if when-function
-	       (funcall when-function)
-	       t)))
-     actions)))
+(defun view-actions (view-name context)
+  (remove nil (mapcar #'(lambda (cons)
+			  (funcall (car cons) context))
+		      (getf *actions* view-name))))
 
 ;;
-;; Default actions
+;; Default actions: main view
 ;;
 
-(define-action delete-entry (:entry 10) (context)
+(defun create-entry-interaction (input state)
+  (multiple-value-bind (entry interactions) (make-entry input)
+    (acons :id (id entry) (acons :interactions interactions state))))
+
+(defun create-entry-navigation (state)
+  (list :entry (assoc :id state)))
+
+(define-action create-entry-with-string (:main 10) (context)
+  (declare (ignore context))
+  (list :label "Create entry here"
+	:command "I"
+	:navigation 'create-entry-navigation
+	:interactions (list (list :type :string
+				  :newlines-submit 2
+				  :message "New entry:~%"
+				  :function #'create-entry-interaction
+				  :interactions :interactions))))
+
+(define-action create-entry-with-editor (:main 20) (context)
+  (declare (ignore context))
+  (list :label "Create entry in editor"
+	:command "E"
+	:navigation #'create-entry-navigation
+	:interactions (list (list :type :editor
+				  :function #'create-entry-interaction
+				  :interactions :interactions))))
+
+(define-action search (:main 30) (context)
+  (declare (ignore context))
+  (list :label "Search / list entries"
+	:command "S"
+	:navigation :search))
+
+(define-action quit (:main 40) (context)
+  (declare (ignore context))
+  (list :label "Quit"
+	:command "Q"
+	:interactions '((:message "Bye-bye.~%"))))
+
+;;
+;; Default actions: entry view
+;;
+
+(defun trim-if-one-liner (string)
+  (let ((first-newline (position #\Newline string)))
+    (if first-newline
+	(let ((rest-string (subseq string first-newline)))
+	  (if (zerop (length (string-trim '(#\Newline #\Space) rest-string)))
+	      (string-right-trim '(#\Newline #\Space) string)
+	      string))
+	string)))
+
+(define-action edit (:entry 10) (context)
+  (list :label "Edit"
+	:description "Edit entry"
+	:command "E"
+	:interactions (list
+		       (list :type :editor
+			     :content #'(lambda (state)
+					  (declare (ignore state))
+					  (content (getf context :entry)))
+			     :function #'(lambda (input state)
+					   (let* ((entry (getf context :entry))
+						  (content (trim-if-one-liner input))
+						  (interactions (edit-entry entry content)))
+					     (acons :interactions interactions state)))
+			     :interactions :interactions))))
+
+(define-action delete (:entry 20) (context)
   (list :label "Delete"
 	:description "Delete entry"
 	:command "D"
-	:interactions '((:type :boolean
-			 :message "Delete entry?"
-			 :key :delete?))
+	:navigation :main
+	:interactions '((:type :boolean :message "Delete entry?" :key :delete?))
 	:function #'(lambda (state)
 		      (when (cdr (assoc :delete? state))
 			(del-entry (getf context :entry))))))
 
-(define-action add-triple (:entry 20) (context)
+(defun parse-entry-id (string)
+  (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))
+    (when found (parse-integer (subseq (first found) 1)))))
+
+(define-action add-triple (:entry 30) (context)
   (list :label "Add triple"
 	:description "Add triple for this subject"
 	:command "+"
-	:interactions '((:type :string
-			 :message "Predicate:"
-			 :key :predicate)
-			(:type :string
-			 :message "Object:"
-			 :key :object))
+	:interactions '((:type :string :message "Predicate:" :key :predicate)
+			(:type :string :message "Object:" :key :object))
 	:function #'(lambda (state)
 		      (ensure-triple
 		       (list (id (getf context :entry))
@@ -472,41 +586,44 @@
 			       (or (parse-entry-id string)
 				   (id (ensure-short string)))))))))
 
-(define-action del-triple (:entry 30) (context)
-  (list :label "Delete triple"
-	:command "-"
-	:when #'(lambda () (getf context :indexed-triples))
-	:interactions (list
-		       (list :type :integer
-			     :message "Select triple to delete:~%"
-			     :key :index
-			     :validation #'(lambda (input state)
-					     (declare (ignore state))
-					     (assoc input
-						    (getf context :indexed-triples)
-						    :test #'eql)))
-		       (list :message
-			     #'(lambda (state)
-				 (format nil "Selected: ~s~%"
-					 (format-triple
-					  nil
-					  (cdr (assoc (getf state :index)
+(define-action del-triple (:entry 40) (context)
+  (when (getf context :indexed-triples)
+    (flet ((selected-triple (state)
+	     (let ((triples (getf context :indexed-triples))
+		   (index (cdr (assoc :index state))))
+	       (cdr (assoc index triples :test #'eql)))))
+      (list :label "Delete triple"
+	    :command "-"
+	    :interactions (list
+			   (list :type :integer
+				 :message "Select triple to delete:~%"
+				 :key :index
+				 :validate #'(lambda (input state)
+					       (declare (ignore state))
+					       (assoc input
 						      (getf context :indexed-triples)
-						      :test #'eql))
-					  (getf context :entry)))))
-		       (list :type :boolean
-			     :message "Delete this triple?"
-			     :key :delete?))
-	:function #'(lambda (state)
-		      (when (getf state :delete?)
-			(let ((triple (cdr (assoc (getf state :index)
-						  (getf context :indexed-triples)
-						  :test #'eql))))
-			  (when triple
-			    (del-triple triple)))))))
+						      :test #'eql)))
+			   (list :message
+				 #'(lambda (state)
+				     (format nil
+					     "Selected: ~s~%"
+					     (format-triple nil
+							    (selected-triple state)
+							    (getf context :entry)))))
+			   (list :type :boolean
+				 :message "Delete this triple?"
+				 :key :delete?))
+	    :function #'(lambda (state)
+			  (when (cdr (assoc :delete? state))
+			    (let ((triple (selected-triple state)))
+			      (when triple (del-triple triple)))))))))
+
+(define-action close (:entry 50) (context)
+  (declare (ignore context))
+  '(:label "Quit" :command "Q" :navigation :main))
 
 ;;
-;; Edit content in CLI
+;; CLI: editor
 ;;
 
 (defparameter *content-filename* "/Users/ilshad/tmp/pkm.tmp")
@@ -525,39 +642,146 @@
   (uiop:run-program (editor-program-cmd))
   (uiop:read-file-string *content-filename*))
 
-(defun trim-if-one-liner (string)
-  (let ((first-newline (position #\Newline string)))
-    (if first-newline
-	(let ((rest-string (subseq string first-newline)))
-	  (if (zerop (length (string-trim '(#\Newline #\Space) rest-string)))
-	      (string-right-trim '(#\Newline #\Space) string)
-	      string))
-	string)))
+;;
+;; CLI: actions & interactions
+;;
 
-(defun read-multiline ()
+(defun prompt (&optional message)
+  (when message (format t message))
+  (format t "> ")
+  (force-output))
+
+(defun read-multiline (newlines-submit)
   (let ((empty-lines-counter 0))
     (with-output-to-string (out)
       (loop
 	(let ((char (read-char)))
 	  (if (char= char #\Newline)
 	      (progn (incf empty-lines-counter)
-		     (when (= empty-lines-counter 2)
+		     (when (= empty-lines-counter newlines-submit)
 		       (return)))
 	      (when (not (zerop empty-lines-counter))
 		(setf empty-lines-counter 0)))
 	  (write-char char out))))))
 
+(defun cli-interaction-read-input (interaction state)
+  (let ((message (getf interaction :message)))
+    (case (getf interaction :type)
+      (:boolean
+       (funcall #'y-or-n-p message))
+
+      (:integer
+       (prompt message)
+       (let ((input (read-from-string (string-trim '(#\Space) (read-line)))))
+	 (when (integerp input)
+	   input)))
+      
+      (:string
+       (prompt message)
+       (let ((newlines-submit (getf interaction :newlines-submit 0)))
+	 (if (zerop newlines-submit)
+	     (read-line)
+	     (string-trim '(#\Space #\Newline)
+			  (read-multiline newlines-submit)))))
+
+      (:editor
+       (edit-string-in-program
+	(let ((content-function (getf interaction :content)))
+	  (if content-function
+	      (funcall content-function state)
+	      "")))))))
+
+(defun cli-interaction-input (interaction state)
+  (let ((input (cli-interaction-read-input interaction state))
+	(validate (getf interaction :validate)))
+    (if validate
+	(if (funcall validate input state)
+	    input
+	    (progn (format t "Invalid input~%")
+		   (cli-interaction-input interaction state)))
+	input)))
+
+(defun cli-interactions (interactions)
+  (let ((state))
+    (dolist (interaction interactions)
+      (let ((when-prop (getf interaction :when)))
+	(when (or (null when-prop)
+		  (cond
+		    ((keywordp when-prop) (cdr (assoc when-prop state)))
+		    ((functionp when-prop) (funcall when-prop state))))
+	  (let* ((message (getf interaction :message))
+		 (message (cond
+			    ((functionp message) (funcall message state))
+			    ((stringp message) message))))
+	    (if (getf interaction :type)
+		(let ((input (cli-interaction-input interaction state))
+		      (key (getf interaction :key))
+		      (function (getf interaction :function)))
+		  (setf state
+			(cond
+			  (key (acons key input state))
+			  (function (funcall function input state)))))
+		(format t message))
+	    (let ((k (getf interaction :interactions)))
+	      (when k
+		(let ((nested (cdr (assoc k state))))
+		  (when nested (cli-interactions nested)))))))))
+    state))
+
+(defun cli-actions (view-name &optional context)
+  (let ((actions (view-actions view-name context)))
+    (list :menu-options
+	  (mapcar #'(lambda (action)
+		      (cons (getf action :command)
+			    (or (getf action :description)
+				(getf action :label))))
+		  actions)
+
+	  :action-runners
+	  (mapcar #'(lambda (action)
+		      (cons (getf action :command)
+			    #'(lambda ()
+				(let ((interactions (getf action :interactions))
+				      (function (getf action :function))
+				      (navigation (getf action :navigation)))
+				  (if interactions
+				      (let ((state (cli-interactions interactions)))
+					(when function (funcall function state))
+					(when navigation
+					  (if (functionp navigation)
+					      (funcall navigation state)
+					      navigation)))
+				      (progn
+					(when function (funcall function))
+					(when navigation
+					  (if (functionp navigation)
+					      (funcall navigation)
+					      navigation))))))))
+		  actions))))
+
+(defun run-cli-action (input actions)
+  (let ((function (cdr (assoc input
+			      (getf actions :action-runners)
+			      :test #'string-equal))))
+    (when function
+      (or (funcall function) t))))
+
+(defun cli-action-navigation (nav stay-here)
+  (cond
+    ((eql nav :main) t)
+    ((eql nav :search) (cli-search-view))
+    ((and (listp nav)
+	  (eql (first nav) :entry)
+	  (integerp (second nav)))
+     (cli-entry-view (get-entry (second nav))))
+    (t (funcall stay-here))))
+
 ;;
-;; CLI
+;; CLI: views
 ;;
 
 (defun hr ()
   (format t "~&~v{~c~:*~}~%" 66 '(#\-)))
-
-(defun prompt (&optional message)
-  (when message (format t message))
-  (format t "> ")
-  (force-output))
 
 (defun read-menu-input (options)
   (prompt)
@@ -588,10 +812,6 @@
 		  (cdr item))))
     (read-menu-input options)))
 
-(defmacro cli-menu-case (&body cases)
-  `(case (cli-menu ',(loop for x in cases collect (cons (caar x) (cadar x))))
-     ,@(loop for x in cases collect `(,(caar x) ,@(cdr x)))))
-
 (defun menu-items-triples (entry)
   (let ((indexed-triples
 	  (loop for triple in (search-triples nil nil nil (id entry))
@@ -606,71 +826,7 @@
 		collect (cons (prin1-to-string (car item))
 			      (format-triple nil (cdr item) entry))))))
 
-(defun parse-entry-id (string)
-  (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))
-    (when found (parse-integer (subseq (first found) 1)))))
-
-(defun cli-interactions (interactions)
-  (let ((state))
-    (dolist (interaction interactions)
-      (terpri)
-      (destructuring-bind (&key when message type key function) interaction
-       	(when (or (null when)
-		  (cond
-		    ((keywordp when) (cdr (assoc when state)))
-		    ((functionp when) (funcall when state))))
-	  (let* ((message (cond
-			    ((functionp message) (funcall message state))
-			    ((stringp message) message)))
-		 (input (case type
-			  (:boolean
-			   (funcall #'y-or-n-p message))
-
-			  (:string
-			   (prompt message)
-			   (read-line))
-
-			  (:integer
-			   (prompt message)
-			   (let ((input (read-from-string
-					 (string-trim '(#\Space)
-						      (read-line)))))
-			     (when (integerp input)
-			       input))))))
-	    (setf state
-		  (cond
-		    (key (acons key input state))
-		    (function (funcall function input state))))))))
-    state))
-
-(defun cli-actions (view context)
-  (let ((actions (view-actions view context)))
-    (list :options
-	  (mapcar #'(lambda (action)
-		      (cons (getf action :command)
-			    (or (getf action :description)
-				(getf action :label))))
-		  actions)
-
-	  :cases
-	  (mapcar #'(lambda (action)
-		      (cons (getf action :command)
-			    #'(lambda ()
-				(let ((interactions (getf action :interactions))
-				      (function (getf action :function)))
-				  (if interactions
-				      (let ((state (cli-interactions interactions)))
-					(when function (funcall function state)))
-				      (when function (funcall function)))))))
-		  actions))))
-
-(defun cli-action-case (input actions)
-  (let ((function (cdr (assoc input (getf actions :cases) :test #'string-equal))))
-    (when function
-      (funcall function)
-      t)))
-
-(defun cli-entry (entry)
+(defun cli-entry-view (entry)
   (terpri)
   (hr)
   (write-string (content entry))
@@ -682,21 +838,14 @@
 					      :menu-items-triples menu-items-triples)))
 	   (options (append menu-items-triples
 			    (when menu-items-triples '((:separator)))
-			    '(("E" . "Edit entry"))
-			    (getf actions :options)
-			    '(("Q" . "Quit"))))
+			    (getf actions :menu-options)))
 	   (input (cli-menu options))
 	   (index (read-from-string input)))
       (if (integerp index)
 	  (let ((triple (cdr (assoc index indexed-triples :test #'eql))))
-	    (when triple
-	      (cli-entry (complement-entry entry triple))))
-	  (or (cli-action-case input actions)
-	      (case input
-		("E"
-		 (let ((string (edit-string-in-program (content entry))))
-		   (cli-interactions (edit-entry entry (trim-if-one-liner string))))
-		 (cli-entry entry))))))))
+	    (when triple (cli-entry-view (complement-entry entry triple))))
+	  (let ((nav (run-cli-action input actions)))
+	    (when nav (cli-action-navigation nav #'(lambda () (cli-entry-view entry)))))))))
 
 (defun list-entries-ids ()
   (loop for id being the hash-keys in *entries* using (hash-value entry)
@@ -735,33 +884,19 @@
 	  (setf ids (when page? (subseq ids *page-size*))))
 	(return))))
 
-(defun cli-create-entry (content)
-  (multiple-value-bind (entry interactions) (make-entry content)
-    (cli-interactions interactions)
-    (cli-entry entry)))
+(defun cli-search-view ()
+  (let ((ids (list-entries-ids)))
+    (if ids
+	(let ((entry (cli-list-entries ids)))
+	  (when entry
+	    (cli-entry-view entry)))
+	(format t "Nothing to show"))))
 
-(defun cli-main ()
-  (cli-menu-case
-
-    (("I" "Create entry here")
-     (prompt "New entry:~%")
-     (cli-create-entry (string-trim '(#\Space #\Newline) (read-multiline)))
-     (cli-main))
-
-    (("E" "Create entry in editor")
-     (cli-create-entry (trim-if-one-liner (edit-string-in-program)))
-     (cli-main))
-
-    (("S" "Search / list entries")
-     (let ((ids (list-entries-ids)))
-       (if ids
-	   (let ((entry (cli-list-entries (list-entries-ids))))
-	     (when entry (cli-entry entry)))
-	   (format t "Nothing to show")))
-     (cli-main))
-
-    (("Q" "Quit")
-     (format t "Bye-bye.~%"))))
+(defun cli-main-view ()
+  (let* ((actions (cli-actions :main))
+	 (input (cli-menu (getf actions :menu-options)))
+	 (nav (run-cli-action input actions)))
+    (when nav (cli-action-navigation nav #'cli-main-view))))
 
 (defun run ()
-  (cli-main))
+  (cli-main-view))
