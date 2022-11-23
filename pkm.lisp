@@ -390,29 +390,29 @@
                 a keyboard shortcut in other frontends.
    - :interactions - list of plists, see the corresponding section below.
    - :function - main function of the action.
-   - :navigation - navigation spec or function that takes s returns navigation
-                   spec, defining where to redirect UI after this action.
+   - :route - view spec or function that takes state and returns view spec,
+              defining the view, that must be open after this action.
 
-   If interactions are defined, the main function and navigation function
-   take the state built from these interactions. Otherwise, the main function
-   and navigation function take no arguments.
+   If interactions are defined, the main function and route function take the
+   state built from these interactions. Otherwise, the main function and route
+   function take no arguments.
 
    Main function is for side effects only. Its return value is always ignored.
 
-   Navigation can be specified as:
+   Route can be specified as:
 
    - a view name keyword;
    - a list containing view name keyword and some identifier;
    - a function that returns any of the variants shown above.
 
-   If navigation is not defined (or the navigation function returns NIL),
-   UI stays on the same view, where action has been called.
+   If :route is not defined (or the :route function returns NIL), UI stays in
+   the same view, where action has been called.
 
    Overall, functions defined in action run in following order:
 
    - interactions,
    - main function,
-   - navigation.
+   - route.
 
 
    Interactions
@@ -494,14 +494,14 @@
   (multiple-value-bind (entry interactions) (make-entry input)
     (acons :id (id entry) (acons :interactions interactions state))))
 
-(defun create-entry-navigation (state)
-  (list :entry (assoc :id state)))
+(defun create-entry-route (state)
+  (list :entry (cdr (assoc :id state))))
 
 (define-action create-entry-with-string (:main 10) (context)
   (declare (ignore context))
   (list :label "Create entry here"
 	:command "I"
-	:navigation 'create-entry-navigation
+	:route #'create-entry-route
 	:interactions (list (list :type :string
 				  :newlines-submit 2
 				  :message "New entry:~%"
@@ -512,7 +512,7 @@
   (declare (ignore context))
   (list :label "Create entry in editor"
 	:command "E"
-	:navigation #'create-entry-navigation
+	:route #'create-entry-route
 	:interactions (list (list :type :editor
 				  :function #'create-entry-interaction
 				  :interactions :interactions))))
@@ -521,12 +521,13 @@
   (declare (ignore context))
   (list :label "Search / list entries"
 	:command "S"
-	:navigation :search))
+	:route :search))
 
 (define-action quit (:main 40) (context)
   (declare (ignore context))
   (list :label "Quit"
 	:command "Q"
+	:route :exit
 	:interactions '((:message "Bye-bye.~%"))))
 
 ;;
@@ -562,7 +563,7 @@
   (list :label "Delete"
 	:description "Delete entry"
 	:command "D"
-	:navigation :main
+	:route :main
 	:interactions '((:type :boolean :message "Delete entry?" :key :delete?))
 	:function #'(lambda (state)
 		      (when (cdr (assoc :delete? state))
@@ -620,7 +621,7 @@
 
 (define-action close (:entry 50) (context)
   (declare (ignore context))
-  '(:label "Quit" :command "Q" :navigation :main))
+  '(:label "Quit" :command "Q" :route :main))
 
 ;;
 ;; CLI: editor
@@ -743,38 +744,27 @@
 			    #'(lambda ()
 				(let ((interactions (getf action :interactions))
 				      (function (getf action :function))
-				      (navigation (getf action :navigation)))
+				      (route (getf action :route)))
 				  (if interactions
 				      (let ((state (cli-interactions interactions)))
 					(when function (funcall function state))
-					(when navigation
-					  (if (functionp navigation)
-					      (funcall navigation state)
-					      navigation)))
+					(when route
+					  (if (functionp route)
+					      (funcall route state)
+					      route)))
 				      (progn
 					(when function (funcall function))
-					(when navigation
-					  (if (functionp navigation)
-					      (funcall navigation)
-					      navigation))))))))
+					(when route
+					  (if (functionp route)
+					      (funcall route)
+					      route))))))))
 		  actions))))
 
 (defun run-cli-action (input actions)
   (let ((function (cdr (assoc input
 			      (getf actions :action-runners)
 			      :test #'string-equal))))
-    (when function
-      (or (funcall function) t))))
-
-(defun cli-action-navigation (nav stay-here)
-  (cond
-    ((eql nav :main) t)
-    ((eql nav :search) (cli-search-view))
-    ((and (listp nav)
-	  (eql (first nav) :entry)
-	  (integerp (second nav)))
-     (cli-entry-view (get-entry (second nav))))
-    (t (funcall stay-here))))
+    (when function (funcall function))))
 
 ;;
 ;; CLI: views
@@ -843,9 +833,10 @@
 	   (index (read-from-string input)))
       (if (integerp index)
 	  (let ((triple (cdr (assoc index indexed-triples :test #'eql))))
-	    (when triple (cli-entry-view (complement-entry entry triple))))
-	  (let ((nav (run-cli-action input actions)))
-	    (when nav (cli-action-navigation nav #'(lambda () (cli-entry-view entry)))))))))
+	    (when triple
+	      (route (list :entry (id (complement-entry entry triple))))))
+	  (route (run-cli-action input actions)
+		 (list :entry (id entry)))))))
 
 (defun list-entries-ids ()
   (loop for id being the hash-keys in *entries* using (hash-value entry)
@@ -888,15 +879,33 @@
   (let ((ids (list-entries-ids)))
     (if ids
 	(let ((entry (cli-list-entries ids)))
-	  (when entry
-	    (cli-entry-view entry)))
-	(format t "Nothing to show"))))
+	  (if entry
+	      (route (list :entry (id entry)))
+	      (route :main)))
+	(progn (format t "Nothing to show")
+	       (route :main)))))
 
 (defun cli-main-view ()
   (let* ((actions (cli-actions :main))
-	 (input (cli-menu (getf actions :menu-options)))
-	 (nav (run-cli-action input actions)))
-    (when nav (cli-action-navigation nav #'cli-main-view))))
+	 (input (cli-menu (getf actions :menu-options))))
+    (route (run-cli-action input actions) :main)))
+
+(defun route (route &optional default)
+  (cond
+    ((eql route :main)
+     (cli-main-view))
+
+    ((eql route :search)
+     (cli-search-view))
+
+    ((and (listp route)
+	  (eql (first route) :entry)
+	  (integerp (second route)))
+     (cli-entry-view (get-entry (second route))))
+
+    ((eql route :exit) t)
+
+    (t (when default (route default)))))
 
 (defun run ()
-  (cli-main-view))
+  (route :main))
