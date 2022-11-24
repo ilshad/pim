@@ -17,11 +17,12 @@
    (content :initarg :content :accessor content)))
 
 (defmethod print-object ((object entry) stream)
-  (with-slots (id content) object
-    (multiple-value-bind (string cut?) (string-cut content 20)
-      (format stream
-	      "~d: \"~a~:[\"~;...\" (~d chars)~]"
-	      id string cut? (length content)))))
+  (print-unreadable-object (object stream :type t)
+    (with-slots (id content) object
+      (multiple-value-bind (string cut?) (string-cut content 20)
+	(format stream
+		"~d: \"~a~:[\"~;...\" (~d chars)~]"
+		id string cut? (length content))))))
 
 (defun string-cut (string length)
   (let ((length (min length (or (position #\Newline string) (1+ length)))))
@@ -203,10 +204,11 @@
        - context plist, which contains:
            - :content-before - previous entry content, if there was one.
 
-   Return NIL or list of Interactions. For more details about Interactions
-   see corresponding section in 'define-action' macro - they are exactly
-   the same. All Interactions from handlers run sequentially after all the
-   handlers, using the state alist to exchange their results."
+   Return NIL or result plist with:
+   - :interactions - list of Interactions to run next to the handler.
+
+   For more details about Interactions see corresponding section in
+   'define-action' macro documentaiton - they are exactly the same."
   `(progn
      (add-handler (quote ,name) (quote ,deps))
      (defun ,name ,args ,@body)))
@@ -214,8 +216,9 @@
 (defun run-handlers (entry &optional context)
   (let ((interactions))
     (dolist (symbol *handlers*)
-      (dolist (interacts (funcall (symbol-function symbol) entry context))
-	(when interacts (push interacts interactions))))
+      (let ((result (funcall (symbol-function symbol) entry context)))
+	(dolist (interaction (getf result :interactions))
+	  (push interaction interactions))))
     interactions))
 
 ;;
@@ -269,7 +272,8 @@
 		     (short-content? after)
 		     (not (string= before after)))
 	    (del-short entry before)
-	    (set-short entry))))))
+	    (set-short entry)))
+      nil)))
 
 (defun url? (string)
   (not (zerop (ppcre:count-matches "^https?:\\/\\/\\S+$" string))))
@@ -280,7 +284,8 @@
   (if (url? (content entry))
       (add-property-triple entry "type" "URL")
       (when (get-property-triple entry "type" "URL")
-	(del-property-triple entry "type" "URL"))))
+	(del-property-triple entry "type" "URL")))
+  nil)
 
 (defun find-urls (string)
   (ppcre:all-matches-as-strings "(https?:\\/\\/\\S+\\w)+" string))
@@ -298,7 +303,8 @@
       (dolist (triple (set-difference before after :test #'equalp))
 	(del-triple triple))
       (dolist (triple (set-difference after before :test #'equalp))
-	(add-triple triple)))))
+	(add-triple triple)))
+    nil))
 
 (defun extract-title (content)
   (when (> (count #\Newline content) 1)
@@ -354,7 +360,7 @@
 				    (del-triple (cdr cons)))
 				  state))
 	      interactions)))
-    interactions))
+    (list :interactions interactions)))
 
 ;;
 ;; Actions
@@ -726,7 +732,8 @@
 	    (let ((k (getf interaction :interactions)))
 	      (when k
 		(let ((nested (cdr (assoc k state))))
-		  (when nested (cli-interactions nested)))))))))
+		  (when nested
+		    (cli-interactions nested)))))))))
     state))
 
 (defun cli-actions (view-name &optional context)
