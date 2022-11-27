@@ -5,24 +5,136 @@
 (in-package #:pkm)
 
 ;;
-;; Entry
+;; Pathnames
+;;
+
+(defparameter *base-directory-namestring* "~/.pkm")
+(defparameter *db-directory-name* "db")
+(defparameter *entries-directory-name* "entries")
+(defparameter *triples-file-name* "triples.sexp")
+(defparameter *shorts-file-name* "shorts.sexp")
+
+(defun base-directory ()
+  (uiop:ensure-directory-pathname
+   (uiop:native-namestring *base-directory-namestring*)))
+
+(defun db-directory ()
+  (uiop:ensure-directory-pathname
+   (merge-pathnames *db-directory-name* (base-directory))))
+
+(defun entries-directory ()
+  (uiop:ensure-directory-pathname
+   (merge-pathnames *entries-directory-name* (db-directory))))
+
+(defun entry-pathname (entry)
+  (merge-pathnames (prin1-to-string (id entry)) (entries-directory)))
+
+(defun triples-pathname ()
+  (merge-pathnames *triples-file-name* (db-directory)))
+
+(defun shorts-pathname ()
+  (merge-pathnames *shorts-file-name* (db-directory)))
+
+;;
+;; Database
 ;;
 
 (defvar *entries* (make-hash-table))
-
+(defvar *shorts* (make-hash-table :test 'equalp))
+(defvar *triples* (list))
 (defvar *entry-id-pointer* 0)
 
+(defun save-entry (entry)
+  (format t "(i) Saving entry ~s~%" entry)
+  (with-open-file (out (entry-pathname entry) :direction :output :if-exists :supersede)
+    (write-string (content entry) out)))
+
+(defun load-entry (entry)
+  (format t "(i) Loading entry ~s~%" entry)
+  (uiop:read-file-string (entry-pathname entry)))
+
+(defun load-entries-ids ()
+  (loop for pathname in (uiop:directory-files (entries-directory))
+	for id = (parse-integer (file-namestring pathname) :junk-allowed t)
+	when id collect id))
+
+(defun init-entries ()
+  (let ((ids (load-entries-ids)))
+    (dolist (id ids)
+      (let ((entry (make-instance 'entry :id id :load? t)))
+	(setf (gethash id *entries*) entry)))
+    (when ids
+      (setf *entry-id-pointer* (reduce #'max ids)))))
+
+(defun shorts-alist ()
+  (loop for content being the hash-keys in *shorts* using (hash-value id)
+	collect (cons content id)))
+
+(defun save-shorts ()
+  (with-open-file (out (shorts-pathname) :direction :output :if-exists :supersede)
+    (prin1 (shorts-alist) out)))
+
+(defun load-shorts ()
+  (with-open-file (in (shorts-pathname) :if-does-not-exist nil)
+    (when in
+      (dolist (cons (read in))
+	(setf (gethash (car cons) *shorts*) (cdr cons))))))
+
+(defun save-triples ()
+  (with-open-file (out (triples-pathname) :direction :output :if-exists :supersede)
+    (prin1 *triples* out)))
+
+(defun load-triples ()
+  (with-open-file (in (triples-pathname) :if-does-not-exist nil)
+    (when in
+      (setf *triples* (read in)))))
+
+(defun init-db ()
+  (ensure-directories-exist (entries-directory))
+  (init-entries)
+  (load-shorts)
+  (load-triples))
+
+;;
+;; Entry
+;;
+
 (defclass entry ()
-  ((id :initarg :id :initform (incf *entry-id-pointer*) :reader id)
-   (content :initarg :content :accessor content)))
+  ((id
+    :initarg :id
+    :initform (incf *entry-id-pointer*)
+    :reader id)
+   (load?
+    :initarg :load?
+    :initform nil)
+   (content
+    :initform nil)))
 
 (defmethod print-object ((object entry) stream)
   (print-unreadable-object (object stream :type t)
-    (with-slots (id content) object
-      (multiple-value-bind (string cut?) (string-cut content 20)
-	(format stream
-		"~d: \"~a~:[\"~;...\" (~d chars)~]"
-		id string cut? (length content))))))
+    (with-slots (id content load?) object
+      (if load?
+	  (format stream "~d (not yet loaded)" id)
+	  (multiple-value-bind (string cut?) (string-cut content 20)
+	    (format stream "~d: \"~a~:[\"~;...\" (~d chars)~]"
+		    id string cut? (length content)))))))
+
+(defgeneric (setf content) (string entry))
+
+(defmethod (setf content) (content (entry entry))
+  (setf (slot-value entry 'content) content)
+  (save-entry entry))
+
+(defgeneric content (entry))
+
+(defmethod content ((entry entry))
+  (with-slots (content load?) entry
+    (if load?
+	(let ((string (load-entry entry)))
+	  (setf content string)
+	  (setf load? nil)
+	  string)
+	content)))
 
 (defun string-cut (string length)
   (let ((length (min length (or (position #\Newline string) (1+ length)))))
@@ -31,7 +143,8 @@
 	string)))
 
 (defun make-entry (content &key short?)
-  (let ((entry (make-instance 'entry :content content)))
+  (let ((entry (make-instance 'entry)))
+    (setf (content entry) content)
     (format t "(i) New entry ~s~%" entry)
     (setf (gethash (id entry) *entries*) entry)
     (values entry (run-handlers entry (list :short? short?)))))
@@ -40,7 +153,7 @@
   (gethash id *entries*))
 
 (defun edit-entry (entry new-content)
-  (with-slots (content) entry
+  (with-accessors ((content content)) entry
     (let ((content-before (copy-seq content)))
       (setf content new-content)
       (run-handlers entry (list :content-before content-before)))))
@@ -56,24 +169,29 @@
 ;; Triples
 ;;
 
-(defvar *triples* (list))
 
 (defun get-triple (triple &optional (triples *triples*))
   (if (equalp triple (car triples))
       (car triples)
       (when (cdr triples) (get-triple triple (cdr triples)))))
 
-(defun set-triple (old new &optional (triples *triples*))
+(defun set-triple* (old new triples)
   (if (equalp old (car triples))
       (progn (setf (car triples) new) t)
-      (when (cdr triples) (set-triple old new (cdr triples)))))
+      (when (cdr triples)
+	(set-triple* old new (cdr triples)))))
+
+(defun set-triple (old new)
+  (set-triple* old new *triples*)
+  (save-triples))
 
 (defun del-triple (triple)
   (format t "(i) Remove triple ~s~%" triple)
-  (set-triple triple nil *triples*))
+  (set-triple triple nil))
 
 (defun add-triple (triple)
   (push triple *triples*)
+  (save-triples)
   (format t "(i) New triple ~s~%" triple)
   triple)
 
@@ -225,8 +343,6 @@
 ;; Default handlers
 ;;
 
-(defvar *shorts* (make-hash-table :test 'equalp))
-
 (defun short-content? (string)
   (and string
        (null (find #\Newline string))
@@ -250,11 +366,13 @@
 
 (defun set-short (entry)
   (setf (gethash (content entry) *shorts*) (id entry))
+  (save-shorts)
   (format t "(i) Added to shorts: ~s~%" entry))
 
 (defun del-short (entry &optional content)
   (let ((content (or content (content entry))))
     (when (remhash content *shorts*)
+      (save-shorts)
       (format t "(i) Removed from shorts: ~s~%" (string-cut content 20)))))
 
 (define-handler update-short () (entry context)
@@ -679,9 +797,7 @@
 
       (:integer
        (prompt message)
-       (let ((input (read-from-string (string-trim '(#\Space) (read-line)))))
-	 (when (integerp input)
-	   input)))
+       (parse-integer (read-line) :junk-allowed t))
       
       (:string
        (prompt message)
@@ -915,4 +1031,5 @@
     (t (when default (route default)))))
 
 (defun run ()
+  (init-db)
   (route :main))
