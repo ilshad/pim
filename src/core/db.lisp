@@ -49,12 +49,9 @@
 	for id = (parse-integer (file-namestring pathname) :junk-allowed t)
 	when id collect id))
 
-(defun init-entries (entries entry-id-pointer)
-  (let ((ids (load-entries-ids)))
-    (dolist (id ids)
-      (let ((entry (make-instance 'entry :id id :load? t)))
-	(setf (gethash id entries) entry)))
-    (when ids (setf entry-id-pointer (reduce #'max ids)))))
+(defun init-entries (entries)
+  (dolist (id (load-entries-ids))
+    (setf (gethash id entries) (make-instance 'entry :id id :load? t))))
 
 ;;
 ;; Shorts
@@ -90,8 +87,8 @@
 ;; Start DB
 ;;
 
-(defun init-db (&key entries entry-id-pointer shorts triples)
+(defun init-db (&key entries shorts triples)
   (ensure-directories-exist (entries-directory))
-  (init-entries entries entry-id-pointer)
+  (init-entries entries)
   (load-shorts shorts)
   (load-triples triples))

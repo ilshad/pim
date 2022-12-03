@@ -37,9 +37,12 @@
        - the entry it runs for,
        - context plist, which contains:
            - :content-before - previous entry content, if there was one.
+           - :short? - the entry is in special category 'short'.
 
    Return NIL or result plist with:
    - :interactions - list of Interactions to run next to the handler.
+
+   See examples of handlers in 'defaults/handlers.lisp'.
 
    For more details about Interactions see corresponding section in
    'define-action' macro documentaiton - they are exactly the same."

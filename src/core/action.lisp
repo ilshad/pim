@@ -54,6 +54,8 @@
    - main function,
    - route.
 
+   See examples of actions in 'defaults/actions.lisp'.
+
 
    Interactions
    ************

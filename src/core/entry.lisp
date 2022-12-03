@@ -1,10 +1,14 @@
 (in-package #:pkm)
 
 (defvar *entries* (make-hash-table))
-(defvar *entry-id-pointer* 0)
+
+(defun max-entry-id ()
+  (loop for k being the hash-keys in *entries*
+	maximizing k into max
+	finally (return max)))
 
 (defclass entry ()
-  ((id :initarg :id :initform (incf *entry-id-pointer*) :reader id)
+  ((id :initarg :id :initform (1+ (max-entry-id)) :reader id)
    (load? :initarg :load? :initform nil)
    (content :initform nil)))
 
