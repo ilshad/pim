@@ -44,7 +44,7 @@
     (setf (content entry) content)
     (format t "(i) New entry ~s~%" entry)
     (setf (gethash (id entry) *entries*) entry)
-    (values entry (run-handlers entry (list :short? short?)))))
+    (values entry (run-handlers entry :add (list :short? short?)))))
 
 (defun get-entry (id)
   (gethash id *entries*))
@@ -53,4 +53,4 @@
   (with-accessors ((content content)) entry
     (let ((content-before (copy-seq content)))
       (setf content new-content)
-      (run-handlers entry (list :content-before content-before)))))
+      (run-handlers entry :edit (list :content-before content-before)))))
