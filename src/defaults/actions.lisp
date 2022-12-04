@@ -78,10 +78,15 @@
 	:description "Delete entry"
 	:command "D"
 	:route :main
-	:interactions '((:type :boolean :message "Delete entry?" :key :delete?))
-	:function #'(lambda (state)
-		      (when (cdr (assoc :delete? state))
-			(del-entry (getf context :entry))))))
+	:interactions (list
+		       (list :type :boolean
+			     :message "Delete entry?"
+			     :function #'(lambda (delete? state)
+					   (when delete?
+					     (let* ((entry (getf context :entry))
+						    (interactions (del-entry entry)))
+					       (acons :interactions interactions state))))
+			     :interactions :interactions))))
 
 (defun parse-entry-id (string)
   (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))

@@ -10,7 +10,6 @@
 	       (:file "src/core/entry")
 	       (:file "src/core/short")
 	       (:file "src/core/triple")
-	       (:file "src/core/delete")
 
 	       (:file "src/defaults/handlers")
 	       (:file "src/defaults/actions")

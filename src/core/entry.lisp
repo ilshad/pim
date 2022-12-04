@@ -54,3 +54,8 @@
     (let ((content-before (copy-seq content)))
       (setf content new-content)
       (run-handlers entry :edit (list :content-before content-before)))))
+
+(defun del-entry (entry)
+  (let ((interactions (run-handlers entry :delete)))
+    (remhash (id entry) *entries*)
+    interactions))

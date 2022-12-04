@@ -41,8 +41,8 @@
 
    Route can be specified as:
 
-   - a view name keyword;
-   - a list containing view name keyword and some identifier;
+   - a view name keyword,
+   - a list containing view name keyword and some identifier,
    - a function that returns any of the variants shown above.
 
    If :route is not defined (or the :route function returns NIL), UI stays in

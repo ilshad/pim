@@ -1,7 +1,6 @@
 (in-package #:pkm)
 
-(define-handler update-short (:add :edit) ()
-  (entry context)
+(define-handler update-short (:add :edit) () (entry context)
   "Shorts are entries, whose content can be used as identifiers, so
    they are indexed additionally. A short entry is a one-line string,
    usually a word or phrase, or URL. It's never created explicitly,
@@ -19,8 +18,7 @@
 	    (set-short entry)))
       nil)))
 
-(define-handler type-url (:add :edit) ()
-  (entry context)
+(define-handler type-url (:add :edit) () (entry context)
   "If the whole content string is a URL, create property 'type' 'URL'."
   (declare (ignore context))
   (if (url? (content entry))
@@ -29,8 +27,7 @@
 	(del-property-triple entry "type" "URL")))
   nil)
 
-(define-handler has-url (:add :edit) (type-url)
-  (entry context)
+(define-handler has-url (:add :edit) (type-url) (entry context)
   "1. Extract all URLs from the content.
    2. Create or find entries for each URL.
    3. Create property 'url' [extraced URL].
@@ -59,8 +56,7 @@
 	collect (cons (content (get-entry (obj triple)))
 		      triple)))
 
-(define-handler set-title (:add :edit) ()
-  (entry context)
+(define-handler set-title (:add :edit) () (entry context)
   "If first line is separated from the rest content by an empty line,
    then interactively create 'title' property using this line.
    Otherwise prompt to user to set the title explicitly or to skip.
@@ -102,3 +98,12 @@
 				  state))
 	      interactions)))
     (list :interactions interactions)))
+
+(define-handler deleting-entry (:delete) () (entry context)
+  "Clean up triples and shorts index before deleting the entry."
+  (declare (ignore context))
+  (dolist (triple (search-triples nil nil nil (id entry)))
+    (del-triple triple))
+  (when (short? entry)
+    (del-short entry))
+  nil)

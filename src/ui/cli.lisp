@@ -123,13 +123,15 @@
 				      (route (getf action :route)))
 				  (if interactions
 				      (let ((state (cli-interactions interactions)))
-					(when function (funcall function state))
+					(when function
+					  (funcall function state))
 					(when route
 					  (if (functionp route)
 					      (funcall route state)
 					      route)))
 				      (progn
-					(when function (funcall function))
+					(when function
+					  (funcall function))
 					(when route
 					  (if (functionp route)
 					      (funcall route)
