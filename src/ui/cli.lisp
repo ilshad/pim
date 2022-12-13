@@ -4,21 +4,20 @@
 ;; Editor
 ;;
 
-(defparameter *content-filename* "/Users/ilshad/tmp/pkm.tmp")
+(defparameter *content-tmp-namestring* "~/.pkm/tmp/entry.md")
 
 (defparameter *editor-program-cmd*
-  (list "/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"
-	"-w"
-	:content-filename))
-
-(defun editor-program-cmd ()
-  (substitute *content-filename* :content-filename *editor-program-cmd*))
+  '("/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"
+    "-w"
+    :tmp))
 
 (defun edit-string-in-program (&optional (string ""))
-  (with-open-file (out *content-filename* :direction :output :if-exists :supersede)
-    (write-string string out))
-  (uiop:run-program (editor-program-cmd))
-  (uiop:read-file-string *content-filename*))
+  (let ((tmp (uiop:native-namestring *content-tmp-namestring*)))
+    (ensure-directories-exist tmp)
+    (with-open-file (out tmp :direction :output :if-exists :supersede)
+      (write-string string out))
+    (uiop:run-program (substitute tmp :tmp *editor-program-cmd*))
+    (uiop:read-file-string tmp)))
 
 ;;
 ;; Actions & Interactions

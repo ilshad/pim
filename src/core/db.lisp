@@ -4,7 +4,7 @@
 ;; Pathnames
 ;;
 
-(defparameter *base-directory-namestring* "~/.pkm")
+(defparameter *base-directory-namestring* "~/.pkm/var")
 (defparameter *db-directory-name* "db")
 (defparameter *entries-directory-name* "entries")
 (defparameter *triples-file-name* "triples.sexp")
