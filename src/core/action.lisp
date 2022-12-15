@@ -4,7 +4,10 @@
 
 (defun add-action (name view index)
   (setf (getf *actions* view)
-	(sort (acons name index (copy-seq (getf *actions* view)))
+	(sort (acons name index
+		     (remove name
+			     (copy-seq (getf *actions* view))
+			     :key #'car))
 	      #'<
 	      :key #'cdr)))
 
