@@ -100,10 +100,17 @@
     (list :interactions interactions)))
 
 (define-handler deleting-entry (:delete) () (entry context)
-  "Clean up triples and shorts index before deleting the entry."
+  "Do some cleanup job before deleting the entry:
+   - delete corresponding triples;
+   - delete short property objects (i.e. short entries which are objects of
+     the triples where this entry is the subject), if after removing the
+     triples they become orphans (i.e. they are not objects of any triples
+     anymore);
+   - clean up shorts index if needed."
   (declare (ignore context))
   (dolist (triple (search-triples nil nil nil (id entry)))
-    (del-triple triple))
+    (del-triple triple)
+    (del-orphan triple))
   (when (short? entry)
     (del-short entry))
   nil)

@@ -103,3 +103,11 @@
   (let ((property-entry (get-short value)))
     (when property-entry
       (del-triple (list (id entry) key (id property-entry))))))
+
+(defun orphan? (entry)
+  (and (short? entry) (null (search-triples nil nil (id entry)))))
+
+(defun del-orphan (triple)
+  (let ((obj (get-entry (obj triple))))
+    (when (orphan? obj)
+      (del-entry obj))))

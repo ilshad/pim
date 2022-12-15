@@ -86,7 +86,7 @@
 
 (defun save-triples ()
   (with-open-file (out (triples-pathname) :direction :output :if-exists :supersede)
-    (prin1 *triples* out)))
+    (prin1 (remove nil *triples*) out)))
 
 (defun load-triples ()
   (with-open-file (in (triples-pathname) :if-does-not-exist nil)

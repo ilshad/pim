@@ -140,10 +140,12 @@
 	    :function #'(lambda (state)
 			  (when (cdr (assoc :delete? state))
 			    (let ((triple (selected-triple state)))
-			      (when triple (del-triple triple)))))))))
+			      (when triple
+				(del-triple triple)
+				(del-orphan triple)))))))))
 
 (define-action close (:entry 50) (context)
   (declare (ignore context))
-  '(:label "Back"
-    :command "L"
+  '(:label "Quit"
+    :command "Q"
     :route :main))
