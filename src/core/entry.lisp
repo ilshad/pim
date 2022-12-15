@@ -55,4 +55,5 @@
 (defun del-entry (entry)
   (let ((interactions (run-handlers entry :delete)))
     (remhash (id entry) *entries*)
+    (delete-entry-file (id entry))
     interactions))

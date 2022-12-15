@@ -59,6 +59,9 @@
   (dolist (id (load-entries-ids))
     (setf (gethash id *entries*) (make-instance 'entry :id id :load? t))))
 
+(defun delete-entry-file (id)
+  (uiop:delete-file-if-exists (entry-pathname id)))
+
 ;;
 ;; Shorts
 ;;

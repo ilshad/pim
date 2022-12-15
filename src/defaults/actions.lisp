@@ -77,7 +77,6 @@
   (list :label "Delete"
 	:description "Delete entry"
 	:command "D"
-	:route :main
 	:interactions (list
 		       (list :type :boolean
 			     :message "Delete entry?"
@@ -85,8 +84,13 @@
 					   (when delete?
 					     (let* ((entry (getf context :entry))
 						    (interactions (del-entry entry)))
-					       (acons :interactions interactions state))))
-			     :interactions :interactions))))
+					       (acons :delete? t
+						      (acons :interactions interactions
+							     state)))))
+			     :interactions :interactions))
+	:route #'(lambda (state)
+		   (when (cdr (assoc :delete? state))
+		     :main))))
 
 (defun parse-entry-id (string)
   (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))
@@ -140,4 +144,6 @@
 
 (define-action close (:entry 50) (context)
   (declare (ignore context))
-  '(:label "Quit" :command "Q" :route :main))
+  '(:label "Back"
+    :command "L"
+    :route :main))
