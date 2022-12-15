@@ -212,8 +212,8 @@
 	  (let ((triple (cdr (assoc index indexed-triples :test #'eql))))
 	    (when triple
 	      (route (list :entry (id (complement-entry entry triple))))))
-	  (route (run-cli-action input actions)
-		 (list :entry (id entry)))))))
+	  (route (or (run-cli-action input actions)
+		     (list :entry (id entry))))))))
 
 (defun list-entries-ids ()
   (loop for id being the hash-keys in *entries* using (hash-value entry)
@@ -265,9 +265,9 @@
 (defun cli-main-view ()
   (let* ((actions (cli-actions :main))
 	 (input (cli-menu (getf actions :menu-options))))
-    (route (run-cli-action input actions) :main)))
+    (route (or (run-cli-action input actions) :main))))
 
-(defun route (route &optional default)
+(defun route (route)
   (cond
     ((eql route :main)
      (cli-main-view))
@@ -280,6 +280,4 @@
 	  (integerp (second route)))
      (cli-entry-view (get-entry (second route))))
 
-    ((eql route :exit) t)
-
-    (t (when default (route default)))))
+    ((eql route :exit) t)))
