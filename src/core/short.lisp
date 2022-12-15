@@ -1,7 +1,5 @@
 (in-package #:pkm)
 
-(defvar *shorts* (make-hash-table :test 'equalp))
-
 (defun short-content? (string)
   (and string
        (null (find #\Newline string))
@@ -14,10 +12,7 @@
 (defun get-short (content)
   (when (short-content? content)
     (let ((id (gethash content *shorts*)))
-      (when id
-	(let ((entry (get-entry id)))
-	  (format t "(i) Found short: ~s~%" entry)
-	  entry)))))
+      (when id (get-entry id)))))
 
 (defun ensure-short (string)
   (let ((content (string-trim '(#\Space #\Newline) string)))
@@ -25,11 +20,9 @@
 
 (defun set-short (entry)
   (setf (gethash (content entry) *shorts*) (id entry))
-  (save-shorts *shorts*)
-  (format t "(i) Added to shorts: ~s~%" entry))
+  (save-shorts))
 
 (defun del-short (entry &optional content)
   (let ((content (or content (content entry))))
     (when (remhash content *shorts*)
-      (save-shorts *shorts*)
-      (format t "(i) Removed from shorts: ~s~%" (string-cut content 20)))))
+      (save-shorts))))

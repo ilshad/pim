@@ -1,7 +1,5 @@
 (in-package #:pkm)
 
-(defvar *entries* (make-hash-table))
-
 (defun max-entry-id ()
   (loop for k being the hash-keys in *entries*
 	maximizing k into max
@@ -42,7 +40,6 @@
 (defun make-entry (content &key short?)
   (let ((entry (make-instance 'entry)))
     (setf (content entry) content)
-    (format t "(i) New entry ~s~%" entry)
     (setf (gethash (id entry) *entries*) entry)
     (values entry (run-handlers entry :add (list :short? short?)))))
 

@@ -1,7 +1,5 @@
 (in-package #:pkm)
 
-(defvar *triples* (list))
-
 (defun get-triple (triple &optional (triples *triples*))
   (if (equalp triple (car triples))
       (car triples)
@@ -15,16 +13,14 @@
 
 (defun set-triple (old new)
   (set-triple* old new *triples*)
-  (save-triples *triples*))
+  (save-triples))
 
 (defun del-triple (triple)
-  (format t "(i) Remove triple ~s~%" triple)
   (set-triple triple nil))
 
 (defun add-triple (triple)
   (push triple *triples*)
-  (save-triples *triples*)
-  (format t "(i) New triple ~s~%" triple)
+  (save-triples)
   triple)
 
 (defun ensure-triple (triple)

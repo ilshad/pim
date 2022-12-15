@@ -1,7 +1,5 @@
 (in-package #:pkm)
 
 (defun run ()
-  (init-db :entries *entries*
-	   :shorts *shorts*
-	   :triples *triples*)
+  (init-db)
   (route :main))

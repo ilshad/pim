@@ -1,6 +1,14 @@
 (in-package #:pkm)
 
 ;;
+;; Indexes
+;;
+
+(defvar *entries* (make-hash-table))
+(defvar *shorts* (make-hash-table :test 'equalp))
+(defvar *triples* (list))
+
+;;
 ;; Pathnames
 ;;
 
@@ -36,12 +44,10 @@
 ;;
 
 (defun save-entry (id content)
-  (format t "(i) Saving entry ~d~%" id)
   (with-open-file (out (entry-pathname id) :direction :output :if-exists :supersede)
     (write-string content out)))
 
 (defun load-entry (id)
-  (format t "(i) Loading entry ~d~%" id)
   (uiop:read-file-string (entry-pathname id)))
 
 (defun load-entries-ids ()
@@ -49,46 +55,46 @@
 	for id = (parse-integer (file-namestring pathname) :junk-allowed t)
 	when id collect id))
 
-(defun init-entries (entries)
+(defun init-entries ()
   (dolist (id (load-entries-ids))
-    (setf (gethash id entries) (make-instance 'entry :id id :load? t))))
+    (setf (gethash id *entries*) (make-instance 'entry :id id :load? t))))
 
 ;;
 ;; Shorts
 ;;
 
-(defun shorts-alist (shorts)
-  (loop for content being the hash-keys in shorts using (hash-value id)
+(defun shorts-alist ()
+  (loop for content being the hash-keys in *shorts* using (hash-value id)
 	collect (cons content id)))
 
-(defun save-shorts (shorts)
+(defun save-shorts ()
   (with-open-file (out (shorts-pathname) :direction :output :if-exists :supersede)
-    (prin1 (shorts-alist shorts) out)))
+    (prin1 (shorts-alist) out)))
 
-(defun load-shorts (shorts)
+(defun load-shorts ()
   (with-open-file (in (shorts-pathname) :if-does-not-exist nil)
     (when in
       (dolist (cons (read in))
-	(setf (gethash (car cons) shorts) (cdr cons))))))
+	(setf (gethash (car cons) *shorts*) (cdr cons))))))
 
 ;;
 ;; Triples
 ;;
 
-(defun save-triples (triples)
+(defun save-triples ()
   (with-open-file (out (triples-pathname) :direction :output :if-exists :supersede)
-    (prin1 triples out)))
+    (prin1 *triples* out)))
 
-(defun load-triples (triples)
+(defun load-triples ()
   (with-open-file (in (triples-pathname) :if-does-not-exist nil)
-    (when in (setf triples (read in)))))
+    (when in (setf *triples* (read in)))))
 
 ;;
 ;; Start DB
 ;;
 
-(defun init-db (&key entries shorts triples)
+(defun init-db ()
   (ensure-directories-exist (entries-directory))
-  (init-entries entries)
-  (load-shorts shorts)
-  (load-triples triples))
+  (init-entries)
+  (load-shorts)
+  (load-triples))
