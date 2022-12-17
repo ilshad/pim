@@ -48,6 +48,7 @@
     (with-input-from-string (stream content)
       (let ((title (read-line stream)))
 	(when (and (not (zerop (length title)))
+		   (> 80 (length title))
 		   (zerop (length (read-line stream))))
 	  title)))))
 
@@ -59,7 +60,7 @@
 (define-handler set-title (:add :edit) () (entry context)
   "If first line is separated from the rest content by an empty line,
    then interactively create 'title' property using this line.
-   Otherwise prompt to user to set the title explicitly or to skip.
+   Otherwise prompt the user to set the title explicitly or to skip.
    Also interactively take care of old 'title' properties, if such
    triples are exist."
   (let ((title (extract-title (content entry)))
