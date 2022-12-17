@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-core)
 
 (defun max-entry-id ()
   (loop for k being the hash-keys in *entries*

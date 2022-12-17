@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-core)
 
 (defparameter *handlers-tmp* nil)
 (defparameter *handlers-sorted* nil)

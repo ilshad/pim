@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-defaults)
 
 ;;
 ;; Main view

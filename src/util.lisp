@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-util)
 
 (defun string-cut (string length)
   (let ((length (min length (or (position #\Newline string) (1+ length)))))

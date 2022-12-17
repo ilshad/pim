@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-cli)
 
 ;;
 ;; Editor
@@ -41,7 +41,7 @@
 		(setf empty-lines-counter 0)))
 	  (write-char char out))))))
 
-(defun cli-interaction-read-input (interaction state)
+(defun interaction-read-input (interaction state)
   (let ((message (getf interaction :message)))
     (case (getf interaction :type)
       (:boolean
@@ -66,14 +66,14 @@
 	      (funcall content-function state)
 	      "")))))))
 
-(defun cli-interaction-input (interaction state)
-  (let ((input (cli-interaction-read-input interaction state))
+(defun interaction-input (interaction state)
+  (let ((input (interaction-read-input interaction state))
 	(validate (getf interaction :validate)))
     (if validate
 	(if (funcall validate input state)
 	    input
 	    (progn (format t "Invalid input~%")
-		   (cli-interaction-input interaction state)))
+		   (interaction-input interaction state)))
 	input)))
 
 (defun cli-interactions (interactions)
@@ -89,7 +89,7 @@
 			    ((functionp message) (funcall message state))
 			    ((stringp message) message))))
 	    (if (getf interaction :type)
-		(let ((input (cli-interaction-input interaction state))
+		(let ((input (interaction-input interaction state))
 		      (key (getf interaction :key))
 		      (function (getf interaction :function)))
 		  (setf state
@@ -104,40 +104,39 @@
 		    (cli-interactions nested)))))))))
     state))
 
+(defun action-menu-option (action)
+  (cons (getf action :command)
+	(or (getf action :description)
+	    (getf action :label))))
+
+(defun action-runner (action)
+  (cons (getf action :command)
+	#'(lambda ()
+	    (let ((interactions (getf action :interactions))
+		  (function (getf action :function))
+		  (route (getf action :route)))
+	      (if interactions
+		  (let ((state (cli-interactions interactions)))
+		    (when function
+		      (funcall function state))
+		    (when route
+		      (if (functionp route)
+			  (funcall route state)
+			  route)))
+		  (progn
+		    (when function
+		      (funcall function))
+		    (when route
+		      (if (functionp route)
+			  (funcall route)
+			  route))))))))
+
 (defun cli-actions (view-name &optional context)
   (let ((actions (view-actions view-name context)))
-    (list :menu-options
-	  (mapcar #'(lambda (action)
-		      (cons (getf action :command)
-			    (or (getf action :description)
-				(getf action :label))))
-		  actions)
+    (list :menu-options (mapcar #'action-menu-option actions)
+	  :action-runners (mapcar #'action-runner actions))))
 
-	  :action-runners
-	  (mapcar #'(lambda (action)
-		      (cons (getf action :command)
-			    #'(lambda ()
-				(let ((interactions (getf action :interactions))
-				      (function (getf action :function))
-				      (route (getf action :route)))
-				  (if interactions
-				      (let ((state (cli-interactions interactions)))
-					(when function
-					  (funcall function state))
-					(when route
-					  (if (functionp route)
-					      (funcall route state)
-					      route)))
-				      (progn
-					(when function
-					  (funcall function))
-					(when route
-					  (if (functionp route)
-					      (funcall route)
-					      route))))))))
-		  actions))))
-
-(defun run-cli-action (input actions)
+(defun run-action (input actions)
   (let ((function (cdr (assoc input
 			      (getf actions :action-runners)
 			      :test #'string-equal))))
@@ -162,7 +161,7 @@
 	(progn (format t "Unexpected option: ~a~%" input)
 	       (read-menu-input options)))))
 
-(defun cli-menu (options &key empty-option)
+(defun menu (options &key empty-option)
   (fresh-line)
   (hr)
   (let ((options (append options
@@ -193,7 +192,7 @@
 		collect (cons (prin1-to-string (car item))
 			      (format-triple nil (cdr item) entry))))))
 
-(defun cli-entry-view (entry)
+(defun entry-view (entry)
   (terpri)
   (hr)
   (write-string (content entry))
@@ -206,13 +205,13 @@
 	   (options (append menu-items-triples
 			    (when menu-items-triples '((:separator)))
 			    (getf actions :menu-options)))
-	   (input (cli-menu options))
+	   (input (menu options))
 	   (index (read-from-string input)))
       (if (integerp index)
 	  (let ((triple (cdr (assoc index indexed-triples :test #'eql))))
 	    (when triple
 	      (route (list :entry (id (complement-entry entry triple))))))
-	  (route (or (run-cli-action input actions)
+	  (route (or (run-action input actions)
 		     (list :entry (id entry))))))))
 
 (defun list-entries-ids ()
@@ -228,7 +227,7 @@
 
 (defparameter *page-size* 10)
 
-(defun cli-list-entries (ids)
+(defun list-entries (ids)
   (loop
     (if ids
 	(let* ((page? (> (length ids) *page-size*))
@@ -241,7 +240,7 @@
 			       collect (cons (prin1-to-string (car item))
 					     (entry-title (get-entry (cdr item)))))
 			 (when page? (list (cons "C" "Cancel")))))
-	       (input (cli-menu options :empty-option (if page? "...more" "Done."))))
+	       (input (menu options :empty-option (if page? "...more" "Done."))))
 	  (if input
 	      (if (string= input "C")
 		  (return)
@@ -252,32 +251,32 @@
 	  (setf ids (when page? (subseq ids *page-size*))))
 	(return))))
 
-(defun cli-search-view ()
+(defun search-view ()
   (let ((ids (list-entries-ids)))
     (if ids
-	(let ((entry (cli-list-entries ids)))
+	(let ((entry (list-entries ids)))
 	  (if entry
 	      (route (list :entry (id entry)))
 	      (route :main)))
 	(progn (format t "Nothing to show")
 	       (route :main)))))
 
-(defun cli-main-view ()
+(defun main-view ()
   (let* ((actions (cli-actions :main))
-	 (input (cli-menu (getf actions :menu-options))))
-    (route (or (run-cli-action input actions) :main))))
+	 (input (menu (getf actions :menu-options))))
+    (route (or (run-action input actions) :main))))
 
 (defun route (route)
   (cond
     ((eql route :main)
-     (cli-main-view))
+     (main-view))
 
     ((eql route :search)
-     (cli-search-view))
+     (search-view))
 
     ((and (listp route)
 	  (eql (first route) :entry)
 	  (integerp (second route)))
-     (cli-entry-view (get-entry (second route))))
+     (entry-view (get-entry (second route))))
 
     ((eql route :exit) t)))

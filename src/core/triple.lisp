@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-core)
 
 (defun get-triple (triple &optional (triples *triples*))
   (if (equalp triple (car triples))
@@ -25,6 +25,15 @@
 
 (defun ensure-triple (triple)
   (or (get-triple triple) (add-triple triple)))
+
+(defun format-triple (stream triple entry)
+  (multiple-value-bind (other-entry position) (complement-entry entry triple)
+    (multiple-value-bind (content cut?) (string-cut (content other-entry) 80)
+      (case position
+	(:subj
+	 (format stream "-> ~a -> ~a~:[~;...~]" (pred triple) content cut?))
+	(:obj
+	 (format stream "<- ~a <- ~a~:[~;...~]" (pred triple) content cut?))))))
 
 (defun subj (triple) (car triple))
 (defun pred (triple) (cadr triple))
@@ -78,15 +87,6 @@
      (values (get-entry (obj triple)) :subj))
     ((= (id entry) (obj triple))
      (values (get-entry (subj triple)) :obj))))
-
-(defun format-triple (stream triple entry)
-  (multiple-value-bind (other-entry position) (complement-entry entry triple)
-    (multiple-value-bind (content cut?) (string-cut (content other-entry) 80)
-      (case position
-	(:subj
-	 (format stream "-> ~a -> ~a~:[~;...~]" (pred triple) content cut?))
-	(:obj
-	 (format stream "<- ~a <- ~a~:[~;...~]" (pred triple) content cut?))))))
 
 (defun add-property-triple (entry key value)
   (ensure-triple (list (id entry) key (id (ensure-short value)))))

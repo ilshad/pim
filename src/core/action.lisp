@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-core)
 
 (defparameter *actions* nil)
 
@@ -90,7 +90,7 @@
    - :string - UI asks for string input,
    - :editor - UI opens text editor.
 
-   :content function takes state and return string, that becomes initial
+   :content function takes state and returns string, that becomes initial
    content in text editor.
 
    :newlines-submit is the number of subsequent newlines, after which
@@ -127,6 +127,20 @@
        (defun ,symbol ,args ,@body))))
 
 (defun view-actions (view-name context)
-  (remove nil (mapcar #'(lambda (cons)
-			  (funcall (car cons) context))
+  "For any given UI implementation, this is the entry point to the world
+   of actions. Along with the view name, this function takes context.
+   That allows to build actions dynamically.
+
+   A frontend takes these actions and implements UI controls, e.g. menu
+   items or toolbar with buttons for each action. It must know how to run
+   subsequent interactions, allowing user input for numbers, strings, etc.
+
+   That's basically what frontend does: it implements different views,
+   such as :entry, :search, :main, etc.; it shows actions on them, it runs
+   interactions and route from one view to another.
+
+   See the example in 'ui/cli.lisp' for the CLI frontend:
+     - 'pkm-cli::cli-actions' to build a menu,
+     - 'pkm-cli::run-action' to react to the input on the menu."
+  (remove nil (mapcar #'(lambda (cons) (funcall (car cons) context))
 		      (getf *actions* view-name))))

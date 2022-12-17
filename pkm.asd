@@ -1,7 +1,7 @@
 (asdf:defsystem "pkm"
   :depends-on ("cl-ppcre")
   :serial t
-  :components ((:file "src/package")
+  :components ((:file "src/packages")
 	       (:file "src/util")
 
 	       (:file "src/core/db")

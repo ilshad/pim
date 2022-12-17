@@ -1,4 +1,4 @@
-(in-package #:pkm)
+(in-package #:pkm-defaults)
 
 (define-handler update-short (:add :edit) () (entry context)
   "Shorts are entries, whose content can be used as identifiers, so
@@ -99,7 +99,7 @@
 	      interactions)))
     (list :interactions interactions)))
 
-(define-handler deleting-entry (:delete) () (entry context)
+(define-handler delete-entry (:delete) () (entry context)
   "Do some cleanup job before deleting the entry:
    - delete corresponding triples;
    - delete short property objects (i.e. short entries which are objects of
