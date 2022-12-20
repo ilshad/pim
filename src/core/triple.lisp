@@ -104,6 +104,15 @@
     (when property-entry
       (del-triple (list (id entry) key (id property-entry))))))
 
+(defun set-property-triple (entry key value)
+  (let ((foundp))
+    (dolist (triple (get-property-triples entry key))
+      (if (string= value (content (get-entry (obj triple))))
+	  (setf foundp t)
+	  (del-triple (list (id entry) key (obj triple)))))
+    (when (not foundp)
+      (add-property-triple entry key value))))
+
 (defun orphan? (entry)
   (and (short? entry) (null (search-triples nil nil (id entry)))))
 

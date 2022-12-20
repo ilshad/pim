@@ -1,5 +1,5 @@
 (asdf:defsystem "pkm"
-  :depends-on ("cl-ppcre")
+  :depends-on ("cl-ppcre" "drakma" "lquery")
   :serial t
   :components ((:file "src/packages")
 	       (:file "src/util")

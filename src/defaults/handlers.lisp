@@ -27,6 +27,23 @@
 	(del-property-triple entry "type" "URL")))
   nil)
 
+(defun extract-title-from-url (url)
+  (multiple-value-bind (body status) (drakma:http-request url)
+    (when (= status 200)
+      (let ((parsed (lquery:$ (initialize body))))
+	(elt (lquery:$ parsed "title" (text)) 0)))))
+
+(define-handler url-title (:add :edit) (type-url) (entry context)
+  "If entry has property 'type' 'URL', extract title from the page
+   and set it as a 'title' property."
+  (declare (ignore context))
+  (when (get-property-triple entry "type" "URL")
+    (let ((title (handler-case (extract-title-from-url (content entry))
+		   (error () nil))))
+      (when title
+	(set-property-triple entry "title" title)
+	nil))))
+
 (define-handler has-url (:add :edit) (type-url) (entry context)
   "1. Extract all URLs from the content.
    2. Create or find entries for each URL.
@@ -43,7 +60,7 @@
 	(add-triple triple)))
     nil))
 
-(defun extract-title (content)
+(defun extract-title-from-content (content)
   (when (> (count #\Newline content) 1)
     (with-input-from-string (stream content)
       (let ((title (read-line stream)))
@@ -63,7 +80,7 @@
    Otherwise prompt the user to set the title explicitly or to skip.
    Also interactively take care of old 'title' properties, if such
    triples are exist."
-  (let ((title (extract-title (content entry)))
+  (let ((title (extract-title-from-content (content entry)))
 	(before (title-triples entry))
 	(interactions))
     (if title

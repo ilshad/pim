@@ -38,6 +38,7 @@
 	   #:get-property-triple
 	   #:get-property-triples
 	   #:del-property-triple
+	   #:set-property-triple
 	   #:del-orphan
 
 	   #:define-handler
