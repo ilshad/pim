@@ -11,6 +11,7 @@
 	       (:file "src/core/short")
 	       (:file "src/core/triple")
 
+	       (:file "src/defaults/util")
 	       (:file "src/defaults/handlers")
 	       (:file "src/defaults/actions")
 
