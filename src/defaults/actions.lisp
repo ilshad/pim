@@ -94,7 +94,7 @@
 	:route #'entry-route
 	:interactions (list (list :type :input
 				  :input :string
-				  :message "Search: "
+				  :message "Search:"
 				  :function #'search-entries)
 			    (list :name :page
 				  :type :function
@@ -169,18 +169,24 @@
   (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))
     (when found (parse-integer (subseq (first found) 1)))))
 
+(defun string-not-empty-validation (input state)
+  (declare (ignore state))
+  (not (zerop (length input))))
+
 (define-action add-triple (:entry 30) (context)
   (list :label "Add triple"
 	:description "Add triple for this subject"
 	:command "+"
-	:interactions '((:type :input
-			 :input :string
-			 :message "Predicate:"
-			 :key :predicate)
-			(:type :input
-			 :input :string
-			 :message "Object:"
-			 :key :object))
+	:interactions (list (list :type :input
+				  :input :string
+				  :message "Predicate:"
+				  :key :predicate
+				  :validate #'string-not-empty-validation)
+			    (list :type :input
+				  :input :string
+				  :message "Object:"
+				  :key :object
+				  :validate #'string-not-empty-validation))
 	:function #'(lambda (state)
 		      (ensure-triple
 		       (list (id (getf context :entry))
