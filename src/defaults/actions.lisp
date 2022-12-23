@@ -9,7 +9,10 @@
     (acons :id (id entry) (acons :interactions interactions state))))
 
 (defun entry-route (state)
-  (list :entry (cdr (assoc :id state))))
+  (let ((id (cdr (assoc :id state))))
+    (if id
+	(list :entry id)
+	:main)))
 
 (define-action create-entry-with-string (:main 10) (context)
   (declare (ignore context))
@@ -69,7 +72,7 @@
 		    :function (listing-select :result-key :id :sources-key :ids))
 	      (list :type :goto
 		    :goto :page
-		    :when #'(lambda (state) (cdr (assoc :ids state)))))))
+		    :when (listing-next-page-p :sources-key :ids)))))
 
 (define-action quit (:main 40) (context)
   (declare (ignore context))

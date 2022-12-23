@@ -45,3 +45,7 @@
 	    (if (string-equal (string-trim '(#\Space) input) "C")
 		(acons sources-key nil state)
 		state)))))
+
+(defun listing-next-page-p (&key (sources-key :sources))
+  #'(lambda (state)
+      (cdr (assoc sources-key state))))
