@@ -33,11 +33,80 @@
 				  :function #'create-entry-interaction
 				  :interactions :interactions))))
 
+(defparameter *search-page-size* 10)
+
+(defun entries-ids ()
+  (loop for id being the hash-keys in *entries* using (hash-value entry)
+	when (not (short? entry))
+	collect id))
+
+(defun search-entries (input state)
+  (declare (ignore input))
+  (acons :ids (entries-ids) state))
+
+(defun entry-title (entry)
+  (let ((property (first (get-property-triples entry "title"))))
+    (if property
+	(content (get-entry (obj property)))
+	(string-cut (content entry) 80))))
+
+(defun search-set-result-page (state)
+  (let ((ids (cdr (assoc :ids state))))
+    (if ids
+      (let* ((page? (> (length ids) *search-page-size*))
+	     (page (if page? (subseq ids 0 *search-page-size*) ids)))
+	(append
+	 (list (cons :listing
+		     (append
+		      (loop for id in page
+			    counting 1 into index
+			    collect (list :label (entry-title (get-entry id))
+					  :index index
+					  :id id))
+		      (if page?
+			  '((:label "Cancel" :index "C")
+			    (:label "...more" :index " "))
+			  '((:label "Done" :index " ")))))
+	       (cons :ids (when page? (subseq ids *search-page-size*))))
+	 state))
+      state)))
+
+(defun search-select-result-item (input state)
+  (let ((index (parse-integer input :junk-allowed t)))
+    (if index
+	(let ((item (find index
+			  (cdr (assoc :listing state))
+			  :key #'(lambda (item) (getf item :index)))))
+	  (append (list (cons :id (getf item :id))
+			(cons :ids nil))
+		  state))
+	(if (string-equal (string-trim '(#\Space) input) "C")
+	    (acons :ids nil state)
+	    state))))
+
+(defun search-next-page? (state)
+  (cdr (assoc :ids state)))
+
 (define-action search (:main 30) (context)
   (declare (ignore context))
-  '(:label "Search / list entries"
-    :command "S"
-    :route :search))
+  (list :label "Search"
+	:command "S"
+	:route #'entry-route
+	:interactions (list (list :type :input
+				  :input :string
+				  :message "Search: "
+				  :function #'search-entries)
+			    (list :name :page
+				  :type :function
+				  :function #'search-set-result-page)
+			    (list :type :listing
+				  :listing :listing)
+			    (list :type :input
+				  :input :string
+				  :function #'search-select-result-item)
+			    (list :type :goto
+				  :goto :page
+				  :when #'search-next-page?))))
 
 (define-action quit (:main 40) (context)
   (declare (ignore context))

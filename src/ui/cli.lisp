@@ -249,53 +249,6 @@
 	  (route (or (run-action input actions)
 		     (list :entry (id entry))))))))
 
-(defun list-entries-ids ()
-  (loop for id being the hash-keys in *entries* using (hash-value entry)
-	when (not (short? entry))
-	collect id))
-
-(defun entry-title (entry)
-  (let ((property (first (get-property-triples entry "title"))))
-    (if property
-	(content (get-entry (obj property)))
-	(string-cut (content entry) 80))))
-
-(defparameter *page-size* 10)
-
-(defun list-entries (ids)
-  (loop
-    (if ids
-	(let* ((page? (> (length ids) *page-size*))
-	       (page (if page? (subseq ids 0 *page-size*) ids))
-	       (indexed-ids (loop for id in page
-				  counting 1 into index
-				  collect (cons index id)))
-	       (options (append
-			 (loop for item in indexed-ids
-			       collect (cons (prin1-to-string (car item))
-					     (entry-title (get-entry (cdr item)))))
-			 (when page? (list (cons "C" "Cancel")))))
-	       (input (menu options :empty-option (if page? "...more" "Done."))))
-	  (if input
-	      (if (string= input "C")
-		  (return)
-		  (let* ((index (read-from-string input))
-			 (id (cdr (assoc index indexed-ids :test #'eql))))
-		    (return (get-entry id))))
-	      (when (not page?)	(return)))
-	  (setf ids (when page? (subseq ids *page-size*))))
-	(return))))
-
-(defun search-view ()
-  (let ((ids (list-entries-ids)))
-    (if ids
-	(let ((entry (list-entries ids)))
-	  (if entry
-	      (route (list :entry (id entry)))
-	      (route :main)))
-	(progn (format t "Nothing to show")
-	       (route :main)))))
-
 (defun main-view ()
   (let* ((actions (cli-actions :main))
 	 (input (menu (getf actions :menu-options))))
@@ -305,10 +258,7 @@
   (cond
     ((eql route :main)
      (main-view))
-
-    ((eql route :search)
-     (search-view))
-
+    
     ((and (listp route)
 	  (eql (first route) :entry)
 	  (integerp (second route)))
