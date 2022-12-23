@@ -102,30 +102,41 @@
 	input)))
 
 (defun cli-interactions (interactions)
-  (let ((state))
-    (dolist (interaction interactions)
-      (when (interaction-when interaction state)
-	(case (getf interaction :type)
-	  (:input
-	   (setf state (funcall (interaction-input-function interaction)
-				(interaction-input interaction state)
-				state)))
+  (let ((index 0) state)
+    (loop
+      (let ((interaction (elt interactions index)))
+	(incf index)
+	(when (interaction-when interaction state)
+	  (case (getf interaction :type)
+	    (:input
+	     (setf state (funcall (interaction-input-function interaction)
+				  (interaction-input interaction state)
+				  state)))
 
-	  (:message
-	   (format t (interaction-message interaction state)))
+	    (:listing
+	     (dolist (item (funcall (interaction-listing-function interaction) state))
+	       (format t "[ ~a ] ~a~%" (getf item :index) (getf item :label))))
 
-	  (:function
-	   (setf state (funcall (getf interaction :function) state)))
+	    (:message
+	     (format t (interaction-message interaction state)))
 
-	  (:listing
-	   (dolist (item (funcall (interaction-listing-function interaction) state))
-	     (format t "[ ~a ] ~a~%" (getf item :index) (getf item :label)))))
+	    (:function
+	     (setf state (funcall (getf interaction :function) state)))
 
-	(let ((k (getf interaction :interactions)))
-	  (when k
-	    (let ((nested (cdr (assoc k state))))
-	      (when nested
-		(cli-interactions nested)))))))
+	    (:goto
+	     (setf index (position (getf interaction :goto)
+				   interactions
+				   :key #'(lambda (interaction)
+					    (getf interaction :name))))))
+
+	  (let ((k (getf interaction :interactions)))
+	    (when k
+	      (let ((nested (cdr (assoc k state))))
+		(when nested
+		  (cli-interactions nested)))))))
+
+      (when (= index (length interactions))
+	(return)))
     state))
 
 (defun action-menu-option (action)

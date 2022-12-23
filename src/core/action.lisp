@@ -75,7 +75,7 @@
    Interactions can be defined here, in actions, and in the handlers
    (see macro 'define-handler'), as a list of plists.
 
-   Each interaction is a plist, where common required prop :type defines
+   Each interaction is a plist, where generic required prop :type defines
    a type of the interaction.
 
    - :input - ask user for input
@@ -83,10 +83,12 @@
    - :message - only show message
    - :function - only run function on state
 
-   Other props depend on the type.
+   Other props include type-specific props and generic props.
 
    Type :input
    -----------
+
+   Type-specific props:
 
    - :input - type of input:
 
@@ -129,40 +131,51 @@
    Type :listing
    -------------
 
-   - :listing - keyword, key in state with the listing; or function that
-     takes state and returns listing.
+   :listing - keyword, key in state with the listing; or function that
+   takes state and returns listing.
 
    Listing must be defined as list of plists, where required props are:
 
-   - :label - string, what to show as an item
-   - :index - interger index for item selection
+   :label - string, what to show as an item
+   :index - interger index for item selection
 
    Type :message
    -------------
 
-   - :message - string or function that takes state and returns string.
+   :message - string or function that takes state and returns string.
 
    Type :function
    --------------
 
-   - :function - function that takes state and returns state.
+   :function - function that takes state and returns state.
 
    This type is not interactive, but it's useful when we build complex
    chains of interactions.
 
-   Common props
+   Type :goto
+   ----------
+
+   :goto - keyword, the name of other interaction, defined by prop :name.
+   Move to that interaction instead of the next one. This type is not
+   interactive, but combined with :when prop, it allows to implement
+   loops of interactions with conditions.
+
+   Generic props
    ------------
 
-   In addition to :type, there are common props:
+   In addition to :type, there are generic optional props:
 
-   - :when - keyword or function. The function takes the state and returns
-     boolean. If its result is NIL, UI skips this interaction. Keyword
-     variant simply checks state for that key.
+   :name - keyword, optional name of the interaction, that can be used
+   in :goto from another interaction.
 
-   - :interactions - keyword pointing to nested interactions in the state.
-     Sometimes interactions run handlers (i.e. add / edit / delete entry),
-     which spawn their interactions. So we put these nested interactions
-     into the state and we say to the frontend how to get them."
+   :when - keyword or function. The function takes the state and returns
+   boolean. If its result is NIL, UI skips this interaction. Keyword
+   variant simply checks state for that key.
+
+   :interactions - keyword pointing to nested interactions in the state.
+   Sometimes interactions run handlers (i.e. add / edit / delete entry),
+   which spawn their interactions. So we put these nested interactions
+   into the state and we say to the frontend how to get them."
   (let ((symbol (read-from-string
 		 (concatenate 'string
 			      (symbol-name name) "-"
