@@ -23,6 +23,32 @@
 ;; Actions & Interactions
 ;;
 
+(defun interaction-when (interaction state)
+  (let ((x (getf interaction :when)))
+    (or (null x)
+	(cond
+	  ((keywordp x) (cdr (assoc x state)))
+	  ((functionp x) (funcall x state))))))
+
+(defun interaction-message (interaction state)
+  (let ((x (getf interaction :message)))
+    (cond
+      ((stringp x) x)
+      ((functionp x) (funcall x state)))))
+
+(defun interaction-input-function (interaction)
+  (let ((key (getf interaction :key))
+	(function (getf interaction :function)))
+    (cond
+      (key #'(lambda (input state) (acons key input state)))
+      (function function))))
+
+(defun interaction-listing-function (interaction)
+  (let ((x (getf interaction :listing)))
+    (cond
+      ((keywordp x) #'(lambda (state) (cdr (assoc x state))))
+      ((functionp x) x))))
+
 (defun prompt (&optional message)
   (when message (format t message))
   (format t "> ")
@@ -42,29 +68,28 @@
 	  (write-char char out))))))
 
 (defun interaction-read-input (interaction state)
-  (let ((message (getf interaction :message)))
-    (case (getf interaction :type)
-      (:boolean
-       (funcall #'y-or-n-p message))
+  (case (getf interaction :input)
+    (:boolean
+     (funcall #'y-or-n-p (interaction-message interaction state)))
 
-      (:integer
-       (prompt message)
-       (parse-integer (read-line) :junk-allowed t))
+    (:integer
+     (prompt (interaction-message interaction state))
+     (parse-integer (read-line) :junk-allowed t))
 
-      (:string
-       (prompt message)
-       (let ((newlines-submit (getf interaction :newlines-submit 0)))
-	 (if (zerop newlines-submit)
-	     (read-line)
-	     (string-trim '(#\Space #\Newline)
-			  (read-multiline newlines-submit)))))
+    (:string
+     (prompt (interaction-message interaction state))
+     (let ((newlines-submit (getf interaction :newlines-submit 0)))
+       (if (zerop newlines-submit)
+	   (read-line)
+	   (string-trim '(#\Space #\Newline)
+			(read-multiline newlines-submit)))))
 
-      (:editor
-       (edit-string-in-program
-	(let ((content-function (getf interaction :content)))
-	  (if content-function
-	      (funcall content-function state)
-	      "")))))))
+    (:editor
+     (edit-string-in-program
+      (let ((content-function (getf interaction :content)))
+	(if content-function
+	    (funcall content-function state)
+	    ""))))))
 
 (defun interaction-input (interaction state)
   (let ((input (interaction-read-input interaction state))
@@ -79,29 +104,28 @@
 (defun cli-interactions (interactions)
   (let ((state))
     (dolist (interaction interactions)
-      (let ((when-prop (getf interaction :when)))
-	(when (or (null when-prop)
-		  (cond
-		    ((keywordp when-prop) (cdr (assoc when-prop state)))
-		    ((functionp when-prop) (funcall when-prop state))))
-	  (let* ((message (getf interaction :message))
-		 (message (cond
-			    ((functionp message) (funcall message state))
-			    ((stringp message) message))))
-	    (if (getf interaction :type)
-		(let ((input (interaction-input interaction state))
-		      (key (getf interaction :key))
-		      (function (getf interaction :function)))
-		  (setf state
-			(cond
-			  (key (acons key input state))
-			  (function (funcall function input state)))))
-		(format t message))
-	    (let ((k (getf interaction :interactions)))
-	      (when k
-		(let ((nested (cdr (assoc k state))))
-		  (when nested
-		    (cli-interactions nested)))))))))
+      (when (interaction-when interaction state)
+	(case (getf interaction :type)
+	  (:input
+	   (setf state (funcall (interaction-input-function interaction)
+				(interaction-input interaction state)
+				state)))
+
+	  (:message
+	   (format t (interaction-message interaction state)))
+
+	  (:function
+	   (setf state (funcall (getf interaction :function) state)))
+
+	  (:listing
+	   (dolist (item (funcall (interaction-listing-function interaction) state))
+	     (format t "[ ~a ] ~a~%" (getf item :index) (getf item :label)))))
+
+	(let ((k (getf interaction :interactions)))
+	  (when k
+	    (let ((nested (cdr (assoc k state))))
+	      (when nested
+		(cli-interactions nested)))))))
     state))
 
 (defun action-menu-option (action)

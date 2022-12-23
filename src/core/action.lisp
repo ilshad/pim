@@ -14,7 +14,7 @@
 (defmacro define-action (name (view index) args &body body)
   "The way to abstract user actions, such as buttons, links, menu items,
    from concrete UI implementations. Once defined, action appears and works
-   in each frontend.
+   in any frontend.
 
    Macro params include a list containing a keyword (the name of the view
    where the action must appear) and integer (index sorting actions).
@@ -63,32 +63,47 @@
    Interactions
    ************
 
-   Interactions is a way to abstract interactive dialogs, step-by-step
-   inputs and wizards, including conditional branching, from concrete
-   UI implementations. Once defined, interaction works in each frontend.
+   Interactions provide a way to abstract interactive dialogs and inputs
+   from concrete UI implementations. It may form conditional branching
+   and looping between interaction. Once defined, interaction works in any
+   frontend.
+
+   Interactions pass data between each other using state - alist
+   (association list), where they can put the results and query results
+   of other interactions.
 
    Interactions can be defined here, in actions, and in the handlers
-   (see macro 'define-handler'), as a sequence of plists.
+   (see macro 'define-handler'), as a list of plists.
 
-   Each interaction is a plist with following keys:
+   Each interaction is a plist, where common required prop :type defines
+   a type of the interaction.
 
-   - :type - keyword, input type
-   - :message - string or function that takes state and returns string
+   - :input - ask user for input
+   - :listing - show list of entries
+   - :message - only show message
+   - :function - only run function on state
+
+   Other props depend on the type.
+
+   Type :input
+   -----------
+
+   - :input - type of input:
+
+       - :boolean - UI asks for a boolean value (e.g. yes / no),
+       - :integer - UI asks for integer number,
+       - :string - UI asks for string input,
+       - :editor - UI opens text editor.
+
+   - :message - prompt: string or function that takes state and returns string
    - :key - keyword, to acons the input into the state
    - :function - function that takes input and state, returns state
    - :validate - predicate function that takes input and state
-   - :when - keyword or predicate function that takes state
    - :content - function, only with :editor input type
    - :newlines-submit - integer, only with :string input type
-   - :interactions - keyword pointing to nested interactions in the state
 
    As a result, interaction shows :message and asks for input depending
-   on :type keyword:
-
-   - :boolean - UI asks for a boolean value (e.g. yes / no),
-   - :integer - UI asks for integer number,
-   - :string - UI asks for string input,
-   - :editor - UI opens text editor.
+   on :input keyword.
 
    :content function takes state and returns string, that becomes initial
    content in text editor.
@@ -101,11 +116,9 @@
    input again.
 
    :function takes the user input and state, performs side effects and
-   returns the state (possibly updated). The state is a alist (association
-   list), where interactions can put their results and query results of
-   other interactions.
+   returns the state (possibly updated).
 
-   The function, in turn, can dynamically define new (i.e. nested)
+   The :function, in turn, can dynamically define new (i.e. nested)
    interactions. To perform them, it must put them into the state
    under some key. Then property :interactions must refer to that key. 
 
@@ -113,11 +126,43 @@
    instead of :function if the only goal of the interaction is to provide
    input that can be used in subsequent interactions.
 
-   :when - keyword or function. The function takes the state and returns
-   boolean. If its result is NIL, UI skips this interaction. Keyword
-   variant simply checks state for that key.
+   Type :listing
+   -------------
 
-   If :type is not presented, interaction only shows the message."
+   - :listing - keyword, key in state with the listing; or function that
+     takes state and returns listing.
+
+   Listing must be defined as list of plists, where required props are:
+
+   - :label - string, what to show as an item
+   - :index - interger index for item selection
+
+   Type :message
+   -------------
+
+   - :message - string or function that takes state and returns string.
+
+   Type :function
+   --------------
+
+   - :function - function that takes state and returns state.
+
+   This type is not interactive, but it's useful when we build complex
+   chains of interactions.
+
+   Common props
+   ------------
+
+   In addition to :type, there are common props:
+
+   - :when - keyword or function. The function takes the state and returns
+     boolean. If its result is NIL, UI skips this interaction. Keyword
+     variant simply checks state for that key.
+
+   - :interactions - keyword pointing to nested interactions in the state.
+     Sometimes interactions run handlers (i.e. add / edit / delete entry),
+     which spawn their interactions. So we put these nested interactions
+     into the state and we say to the frontend how to get them."
   (let ((symbol (read-from-string
 		 (concatenate 'string
 			      (symbol-name name) "-"
@@ -136,7 +181,7 @@
    subsequent interactions, allowing user input for numbers, strings, etc.
 
    That's basically what frontend does: it implements different views,
-   such as :entry, :search, :main, etc.; it shows actions on them, it runs
+   such as :entry, :main, etc.; it shows actions on them, it runs
    interactions and route from one view to another.
 
    See the example in 'ui/cli.lisp' for the CLI frontend:

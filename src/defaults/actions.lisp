@@ -8,15 +8,16 @@
   (multiple-value-bind (entry interactions) (make-entry input)
     (acons :id (id entry) (acons :interactions interactions state))))
 
-(defun create-entry-route (state)
+(defun entry-route (state)
   (list :entry (cdr (assoc :id state))))
 
 (define-action create-entry-with-string (:main 10) (context)
   (declare (ignore context))
   (list :label "Create entry here"
 	:command "I"
-	:route #'create-entry-route
-	:interactions (list (list :type :string
+	:route #'entry-route
+	:interactions (list (list :type :input
+				  :input :string
 				  :newlines-submit 2
 				  :message "New entry:~%"
 				  :function #'create-entry-interaction
@@ -26,23 +27,24 @@
   (declare (ignore context))
   (list :label "Create entry in editor"
 	:command "E"
-	:route #'create-entry-route
-	:interactions (list (list :type :editor
+	:route #'entry-route
+	:interactions (list (list :type :input
+				  :input :editor
 				  :function #'create-entry-interaction
 				  :interactions :interactions))))
 
 (define-action search (:main 30) (context)
   (declare (ignore context))
-  (list :label "Search / list entries"
-	:command "S"
-	:route :search))
+  '(:label "Search / list entries"
+    :command "S"
+    :route :search))
 
 (define-action quit (:main 40) (context)
   (declare (ignore context))
-  (list :label "Quit"
-	:command "Q"
-	:route :exit
-	:interactions '((:message "Bye-bye.~%"))))
+  '(:label "Quit"
+    :command "Q"
+    :route :exit
+    :interactions ((:type :message :message "Bye-bye.~%"))))
 
 ;;
 ;; Entry view
@@ -62,7 +64,8 @@
 	:description "Edit entry"
 	:command "E"
 	:interactions (list
-		       (list :type :editor
+		       (list :type :input
+			     :input :editor
 			     :content #'(lambda (state)
 					  (declare (ignore state))
 					  (content (getf context :entry)))
@@ -78,7 +81,8 @@
 	:description "Delete entry"
 	:command "D"
 	:interactions (list
-		       (list :type :boolean
+		       (list :type :input
+			     :input :boolean
 			     :message "Delete entry?"
 			     :function #'(lambda (delete? state)
 					   (when delete?
@@ -100,8 +104,14 @@
   (list :label "Add triple"
 	:description "Add triple for this subject"
 	:command "+"
-	:interactions '((:type :string :message "Predicate:" :key :predicate)
-			(:type :string :message "Object:" :key :object))
+	:interactions '((:type :input
+			 :input :string
+			 :message "Predicate:"
+			 :key :predicate)
+			(:type :input
+			 :input :string
+			 :message "Object:"
+			 :key :object))
 	:function #'(lambda (state)
 		      (ensure-triple
 		       (list (id (getf context :entry))
@@ -119,7 +129,8 @@
       (list :label "Delete triple"
 	    :command "-"
 	    :interactions (list
-			   (list :type :integer
+			   (list :type :input
+				 :input :integer
 				 :message "Select triple to delete:~%"
 				 :key :index
 				 :validate #'(lambda (input state)
@@ -127,14 +138,16 @@
 					       (assoc input
 						      (getf context :indexed-triples)
 						      :test #'eql)))
-			   (list :message
+			   (list :type :message
+				 :message
 				 #'(lambda (state)
 				     (format nil
 					     "Selected: ~s~%"
 					     (format-triple nil
 							    (selected-triple state)
 							    (getf context :entry)))))
-			   (list :type :boolean
+			   (list :type :input
+				 :input :boolean
 				 :message "Delete this triple?"
 				 :key :delete?))
 	    :function #'(lambda (state)

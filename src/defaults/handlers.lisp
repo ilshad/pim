@@ -85,7 +85,8 @@
 	(interactions))
     (if title
 	(when (null (cdr (assoc title before :test #'string=)))
-	  (push (list :type :boolean
+	  (push (list :type :input
+		      :input :boolean
 		      :message (format nil "Set 'title' property ~s?" title)
 		      :function #'(lambda (input state)
 				    (when input
@@ -95,12 +96,14 @@
 	(when (and (null before)
 		   (not (zerop (count #\Newline (content entry))))
 		   (not (string= (content entry) (getf context :content-before))))
-	  (push (list :type :boolean
+	  (push (list :type :input
+		      :input :boolean
 		      :message "Add title?"
 		      :key :add-title?)
 		interactions)
 	  (push (list :when :add-title?
-		      :type :string
+		      :type :input
+		      :input :string
 		      :message (format nil "Enter title:")
 		      :function #'(lambda (input state)
 				    (add-property-triple entry "title" input)
@@ -108,7 +111,8 @@
 		interactions)))
     (dolist (cons before)
       (when (not (string= (car cons) title))
-	(push (list :type :boolean
+	(push (list :type :input
+		    :input :boolean
 		    :message (format nil "Remove 'title' property ~s?" (car cons))
 		    :function #'(lambda (input state)
 				  (when input
