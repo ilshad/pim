@@ -79,9 +79,9 @@
     (:string
      (prompt (interaction-message interaction state))
      (let ((newlines-submit (getf interaction :newlines-submit 0)))
-       (if (zerop newlines-submit)
-	   (read-line)
-	   (string-trim '(#\Space #\Newline)
+       (string-trim '(#\Space #\Newline)
+		    (if (zerop newlines-submit)
+			(read-line)
 			(read-multiline newlines-submit)))))
 
     (:editor
