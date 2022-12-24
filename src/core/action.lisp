@@ -161,8 +161,13 @@
    interactive, but combined with :when prop, it allows to implement
    loops of interactions with conditions.
 
+   Type :break
+   -----------
+
+   Non-interactive type. Skip all the subsequent interactions.
+
    Generic props
-   ------------
+   -------------
 
    In addition to :type, there are generic optional props:
 

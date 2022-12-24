@@ -103,7 +103,7 @@
 
 	      (list :name :predicates-page
 		    :type :function
-		    :function (listing-page #'identity))
+		    :function (listing-page #'identity :size 5))
 
 	      (list :type :listing)
 
@@ -115,26 +115,24 @@
 		    :type :goto
 		    :goto :predicates-page)
 
-	      (list :when :predicate
-		    :type :message
+	      (list :when #'(lambda (state) (not (cdr (assoc :predicate state))))
+		    :type :break)
+
+	      (list :type :message
 		    :message #'(lambda (state)
 				 (format nil "~%Selected predicate: ~a~%"
 					 (cdr (assoc :predicate state)))))
 
-	      (list :when :predicate
-		    :type :function
+	      (list :type :function
 		    :function #'predicate-search-objects)
 
-	      (list :when :predicate
-		    :name :triples-page
+	      (list :name :triples-page
 		    :type :function
 		    :function (listing-page #'entry-title))
 
-	      (list :when :predicate
-		    :type :listing)
+	      (list :type :listing)
 
-	      (list :when :predicate
-		    :type :input
+	      (list :type :input
 		    :input :string
 		    :function (listing-select :result :id))
 

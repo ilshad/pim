@@ -127,7 +127,9 @@
 	     (setf index (position (getf interaction :goto)
 				   interactions
 				   :key #'(lambda (interaction)
-					    (getf interaction :name))))))
+					    (getf interaction :name)))))
+
+	    (:break (return)))
 
 	  (let ((k (getf interaction :interactions)))
 	    (when k
