@@ -131,8 +131,9 @@
    Type :listing
    -------------
 
-   :listing - keyword, key in state with the listing; or function that
-   takes state and returns listing.
+   :listing - keyword, the key in the state with the listing; or function
+   that takes state and returns listing. It is optional prop, and its
+   default value is keyword :listing.
 
    Listing must be defined as list of plists, where required props are:
 

@@ -44,7 +44,7 @@
       (function function))))
 
 (defun interaction-listing-function (interaction)
-  (let ((x (getf interaction :listing)))
+  (let ((x (getf interaction :listing :listing)))
     (cond
       ((keywordp x) #'(lambda (state) (cdr (assoc x state))))
       ((functionp x) x))))
