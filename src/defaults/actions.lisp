@@ -36,6 +36,13 @@
 				  :function #'create-entry-interaction
 				  :interactions :interactions))))
 
+(defun entry-title (id)
+  (let* ((entry (get-entry id))
+	 (property (first (get-property-triples entry "title"))))
+    (if property
+	(content (get-entry (obj property)))
+	(string-cut (content entry) 80))))
+
 (defun all-entries-not-short ()
   (loop for id being the hash-keys in *entries* using (hash-value entry)
 	when (not (short? entry))
@@ -56,18 +63,15 @@
     ids))
 
 (defun search-entries (input state)
-  (acons :ids
-	 (if (zerop (length input))
-	     (all-entries-not-short)
-	     (search-entries-by-shorts input))
-	 state))
-
-(defun entry-title (id)
-  (let* ((entry (get-entry id))
-	 (property (first (get-property-triples entry "title"))))
-    (if property
-	(content (get-entry (obj property)))
-	(string-cut (content entry) 80))))
+  (if input
+      (let ((ids (search-entries-by-shorts input)))
+	(case (length ids)
+	  (0 (acons :not-found? t state))
+	  (1 (append (list (cons :id (first ids))
+			   (cons :single-match? t))
+		     state))
+	  (t (acons :ids ids state))))
+      (acons :ids (all-entries-not-short) state)))
 
 (define-action search (:main 30) (context)
   (declare (ignore context))
@@ -79,7 +83,12 @@
 				  :message "Search entry:"
 				  :function #'search-entries)
 
-			    (list :type :input
+			    (list :when :not-found?
+				  :type :message
+				  :message "~%NO MATCH FOUND~%")
+
+			    (list :when :ids
+				  :type :input
 				  :input :select
 				  :options :ids
 				  :key :id
