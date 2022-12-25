@@ -100,9 +100,7 @@
 		    :message "Predicate:"
 		    :function #'predicates-search)
 
-	      (list :when :not-found?
-		    :type :message
-		    :message "~%NO MATCH FOUND~%")
+	      (list :when :not-found? :type :message :message "~%NO MATCH FOUND~%")
               
 	      (list :when :predicates
 		    :type :input
@@ -112,17 +110,16 @@
 		    :render #'identity
 		    :size 5)
 	      
-	      (list :type :break
-		    :when #'(lambda (state) (not (cdr (assoc :predicate state)))))
+	      (list :type :break :when-not :predicate)
 
 	      (list :type :message
-		    :message #'(lambda (state)
-				 (format nil "~%~:[Selected predicate~;Found single match~]: ~a~%~%"
-					 (cdr (assoc :single-match? state))
-					 (cdr (assoc :predicate state)))))
+		    :message
+		    #'(lambda (state)
+			(format nil "~%~:[Selected predicate~;Found single match~]: ~a~%~%"
+				(cdr (assoc :single-match? state))
+				(cdr (assoc :predicate state)))))
 
-	      (list :type :function
-		    :function #'predicate-search-objects)
+	      (list :type :function :function #'predicate-search-objects)
 
 	      (list :type :input
 		    :input :select

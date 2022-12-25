@@ -165,7 +165,8 @@
    Type :break
    -----------
 
-   Non-interactive type. Skip all the subsequent interactions.
+   Non-interactive type. Skip all the subsequent interactions. Useful
+   when combined with :when prop.
 
    Generic props
    -------------
@@ -178,6 +179,8 @@
    :when - keyword or function. The function takes the state and returns
    boolean. If its result is NIL, UI skips this interaction. Keyword
    variant simply checks state for that key.
+
+   :when-not - similar to :when back complement.
 
    :interactions - keyword pointing to nested interactions in the state.
    Sometimes interactions run handlers (i.e. add / edit / delete entry),

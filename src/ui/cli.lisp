@@ -24,11 +24,14 @@
 ;;
 
 (defun interaction-when (interaction state)
-  (let ((x (getf interaction :when)))
-    (or (null x)
+  (let ((p (getf interaction :when))
+	(n (getf interaction :when-not)))
+    (or (and (null p) (null n))
 	(cond
-	  ((keywordp x) (cdr (assoc x state)))
-	  ((functionp x) (funcall x state))))))
+	  ((keywordp p) (cdr (assoc p state)))
+	  ((functionp p) (funcall p state))
+	  ((keywordp n) (null (cdr (assoc n state))))
+	  ((functionp n) (null (funcall n state)))))))
 
 (defun interaction-message (interaction state)
   (let ((x (getf interaction :message)))
