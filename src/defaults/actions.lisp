@@ -41,9 +41,26 @@
 	when (not (short? entry))
 	collect id))
 
+(defun search-shorts (input)
+  (loop for content being the hash-keys in *shorts* using (hash-value id)
+	when (search input content :test #'string-equal)
+	collect id))
+
+(defun search-entries-by-shorts (input)
+  (let (ids)
+    (dolist (id (search-shorts input))
+      (dolist (triple (search-triples nil nil nil id))
+	(let ((entry (get-entry (complement-id id triple))))
+	  (when (not (short? entry))
+	    (pushnew (id entry) ids)))))
+    ids))
+
 (defun search-entries (input state)
-  (declare (ignore input))
-  (acons :ids (all-entries-not-short) state))
+  (acons :ids
+	 (if (zerop (length input))
+	     (all-entries-not-short)
+	     (search-entries-by-shorts input))
+	 state))
 
 (defun entry-title (id)
   (let* ((entry (get-entry id))
@@ -59,7 +76,7 @@
 	:route #'entry-route
 	:interactions (list (list :type :input
 				  :input :string
-				  :message "Search:"
+				  :message "Search entry:"
 				  :function #'search-entries)
 
 			    (list :type :input
@@ -94,38 +111,40 @@
   (list :label "Predicates"
 	:command "P"
 	:route #'entry-route
-	:interactions
-	(list (list :type :input
-		    :input :string
-		    :message "Predicate:"
-		    :function #'predicates-search)
+	:interactions (list (list :type :input
+				  :input :string
+				  :message "Search predicate:"
+				  :function #'predicates-search)
 
-	      (list :when :not-found? :type :message :message "~%NO MATCH FOUND~%")
-              
-	      (list :when :predicates
-		    :type :input
-		    :input :select
-		    :options :predicates
-		    :key :predicate
-		    :render #'identity
-		    :size 5)
-	      
-	      (list :type :break :when-not :predicate)
+			    (list :when :not-found?
+				  :type :message
+				  :message "~%NO MATCH FOUND~%")
+			    
+			    (list :when :predicates
+				  :type :input
+				  :input :select
+				  :options :predicates
+				  :key :predicate
+				  :render #'identity)
+			    
+			    (list :type :break
+				  :when-not :predicate)
 
-	      (list :type :message
-		    :message
-		    #'(lambda (state)
-			(format nil "~%~:[Selected predicate~;Found single match~]: ~a~%~%"
-				(cdr (assoc :single-match? state))
-				(cdr (assoc :predicate state)))))
+			    (list :type :message
+				  :message
+				  #'(lambda (state)
+				      (format nil "~%~:[Selected predicate~;Found single match~]: ~a~%~%"
+					      (cdr (assoc :single-match? state))
+					      (cdr (assoc :predicate state)))))
 
-	      (list :type :function :function #'predicate-search-objects)
+			    (list :type :function
+				  :function #'predicate-search-objects)
 
-	      (list :type :input
-		    :input :select
-		    :options :ids
-		    :key :id
-		    :render #'entry-title))))
+			    (list :type :input
+				  :input :select
+				  :options :ids
+				  :key :id
+				  :render #'entry-title))))
 
 (define-action quit (:main 50) (context)
   (declare (ignore context))

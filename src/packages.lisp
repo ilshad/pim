@@ -33,6 +33,7 @@
 	   #:pred
 	   #:obj
 	   #:search-triples
+	   #:complement-id
 	   #:complement-entry
 	   #:add-property-triple
 	   #:get-property-triple

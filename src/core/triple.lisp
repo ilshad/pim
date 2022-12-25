@@ -81,12 +81,14 @@
 	       (equalp p (pred x))))))
    triples))
 
-(defun complement-entry (entry triple)
+(defun complement-id (entry-id triple)
   (cond
-    ((= (id entry) (subj triple))
-     (values (get-entry (obj triple)) :subj))
-    ((= (id entry) (obj triple))
-     (values (get-entry (subj triple)) :obj))))
+    ((= entry-id (subj triple)) (values (obj triple) :subj))
+    ((= entry-id (obj triple)) (values (subj triple) :obj))))
+
+(defun complement-entry (entry triple)
+  (multiple-value-bind (id kw) (complement-id (id entry) triple)
+    (values (get-entry id) kw)))
 
 (defun add-property-triple (entry key value)
   (ensure-triple (list (id entry) key (id (ensure-short value)))))
