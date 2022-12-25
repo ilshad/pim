@@ -67,9 +67,7 @@
       (let ((ids (search-entries-by-shorts input)))
 	(case (length ids)
 	  (0 (acons :not-found? t state))
-	  (1 (append (list (cons :id (first ids))
-			   (cons :single-match? t))
-		     state))
+	  (1 (acons :id (first ids) state))
 	  (t (acons :ids ids state))))
       (acons :ids (all-entries-not-short) state)))
 

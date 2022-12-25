@@ -113,11 +113,13 @@
 			(read-multiline newlines-submit)))))
 
     (:editor
-     (edit-string-in-program
-      (let ((content-function (getf interaction :content)))
-	(if content-function
-	    (funcall content-function state)
-	    ""))))
+     (string-left-trim
+      '(#\Newline)
+      (edit-string-in-program
+       (let ((content-function (getf interaction :content)))
+	 (if content-function
+	     (funcall content-function state)
+	     "")))))
 
     (:select
      (input-select interaction state))))
