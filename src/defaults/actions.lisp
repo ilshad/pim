@@ -43,7 +43,7 @@
 
 (defun search-entries (input state)
   (declare (ignore input))
-  (acons :sources (all-not-short-entries) state))
+  (acons :ids (all-not-short-entries) state))
 
 (defun entry-title (id)
   (let* ((entry (get-entry id))
@@ -57,36 +57,27 @@
   (list :label "Search"
 	:command "S"
 	:route #'entry-route
-	:interactions
-	(list (list :type :input
-		    :input :string
-		    :message "Search:"
-		    :function #'search-entries)
+	:interactions (list (list :type :input
+				  :input :string
+				  :message "Search:"
+				  :function #'search-entries)
 
-	      (list :name :page
-		    :type :function
-		    :function (listing-page #'entry-title))
-
-	      (list :type :listing)
-
-	      (list :type :input
-		    :input :string
-		    :function (listing-select :result :id))
-
-	      (list :when :sources
-		    :type :goto
-		    :goto :page))))
+			    (list :type :input
+				  :input :select
+				  :options :ids
+				  :key :id
+				  :render #'entry-title))))
 
 (defun predicates-search (input state)
   (declare (ignore input))
-  (acons :sources
+  (acons :predicates
 	 (remove-duplicates (mapcar #'pred (remove nil *triples*))
 			    :test #'string-equal)
 	 state))
 
 (defun predicate-search-objects (state)
   (let ((pred (cdr (assoc :predicate state))))
-    (acons :sources
+    (acons :ids
 	   (remove-duplicates (mapcar #'obj (search-triples nil pred)))
 	   state)))
 
@@ -101,44 +92,29 @@
 		    :message "Predicate:"
 		    :function #'predicates-search)
 
-	      (list :name :predicates-page
-		    :type :function
-		    :function (listing-page #'identity :size 5))
-
-	      (list :type :listing)
-
 	      (list :type :input
-		    :input :string
-		    :function (listing-select :result :predicate))
+		    :input :select
+		    :options :predicates
+		    :key :predicate
+		    :render #'identity)
 
-	      (list :when :sources
-		    :type :goto
-		    :goto :predicates-page)
-
-	      (list :when #'(lambda (state) (not (cdr (assoc :predicate state))))
-		    :type :break)
+	      (list :type :break
+		    :when #'(lambda (state)
+			      (not (cdr (assoc :predicate state)))))
 
 	      (list :type :message
 		    :message #'(lambda (state)
-				 (format nil "~%Selected predicate: ~a~%"
+				 (format nil "~%Selected predicate: ~a~%~%"
 					 (cdr (assoc :predicate state)))))
 
 	      (list :type :function
 		    :function #'predicate-search-objects)
 
-	      (list :name :triples-page
-		    :type :function
-		    :function (listing-page #'entry-title))
-
-	      (list :type :listing)
-
 	      (list :type :input
-		    :input :string
-		    :function (listing-select :result :id))
-
-	      (list :when :sources
-		    :type :goto
-		    :goto :triples-page))))
+		    :input :select
+		    :options :ids
+		    :key :id
+		    :render #'entry-title))))
 
 (define-action quit (:main 50) (context)
   (declare (ignore context))

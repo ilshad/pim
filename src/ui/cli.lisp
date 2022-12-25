@@ -43,12 +43,6 @@
       (key #'(lambda (input state) (acons key input state)))
       (function function))))
 
-(defun interaction-listing-function (interaction)
-  (let ((x (getf interaction :listing :listing)))
-    (cond
-      ((keywordp x) #'(lambda (state) (cdr (assoc x state))))
-      ((functionp x) x))))
-
 (defun prompt (&optional message)
   (when message (format t message))
   (format t "> ")
@@ -66,6 +60,36 @@
 	      (when (not (zerop empty-lines-counter))
 		(setf empty-lines-counter 0)))
 	  (write-char char out))))))
+
+(defparameter *default-input-select-size* 9)
+
+(defun input-select (interaction state)
+  (let ((options (copy-seq (cdr (assoc (getf interaction :options) state))))
+	(size (getf interaction :size *default-input-select-size*))
+	(render (getf interaction :render)))
+    (loop
+      (when (null options) (return))
+      (let* ((page? (> (length options) size))
+	     (items (loop for option in (if page? (subseq options 0 size) options)
+			  counting 1 into index
+			  collect (list :index index
+					:option option
+					:render (funcall render option)))))
+	(dolist (item items)
+	  (format t "[ ~a ] ~a~%" (getf item :index) (getf item :render)))
+	(format t (if page?
+		      "[ C ] Cancel~%[   ] ...more~%"
+		      "[   ] Done~%"))
+	(prompt)
+	(let* ((input (string-trim '(#\Space) (read-line)))
+	       (index (parse-integer input :junk-allowed t)))
+	  (when index
+	    (let ((item (find index items :key #'(lambda (item) (getf item :index)))))
+	      (when item (return (getf item :option)))))
+	  (when (string-equal input "C") (return)))
+	(if page?
+	    (setf options (subseq options size))
+	    (return))))))
 
 (defun interaction-read-input (interaction state)
   (case (getf interaction :input)
@@ -89,7 +113,10 @@
       (let ((content-function (getf interaction :content)))
 	(if content-function
 	    (funcall content-function state)
-	    ""))))))
+	    ""))))
+
+    (:select
+     (input-select interaction state))))
 
 (defun interaction-input (interaction state)
   (let ((input (interaction-read-input interaction state))
@@ -112,10 +139,6 @@
 	     (setf state (funcall (interaction-input-function interaction)
 				  (interaction-input interaction state)
 				  state)))
-
-	    (:listing
-	     (dolist (item (funcall (interaction-listing-function interaction) state))
-	       (format t "[ ~a ] ~a~%" (getf item :index) (getf item :label))))
 
 	    (:message
 	     (format t (interaction-message interaction state)))

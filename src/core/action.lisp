@@ -76,12 +76,13 @@
    (see macro 'define-handler'), as a list of plists.
 
    Each interaction is a plist, where generic required prop :type defines
-   a type of the interaction.
+   a type of the interaction:
 
    - :input - ask user for input
-   - :listing - show list of entries
    - :message - only show message
    - :function - only run function on state
+   - :goto - switch to the named interaction instead of the next one
+   - :break - skip all subsequent interactions
 
    Other props include type-specific props and generic props.
 
@@ -95,14 +96,18 @@
        - :boolean - UI asks for a boolean value (e.g. yes / no),
        - :integer - UI asks for integer number,
        - :string - UI asks for string input,
-       - :editor - UI opens text editor.
+       - :editor - UI opens text editor,
+       - :select - UI allows to select options.
 
    - :message - prompt: string or function that takes state and returns string
    - :key - keyword, to acons the input into the state
    - :function - function that takes input and state, returns state
    - :validate - predicate function that takes input and state
-   - :content - function, only with :editor input type
-   - :newlines-submit - integer, only with :string input type
+   - :newlines-submit - integer, only with :string input
+   - :content - function, only with :editor input
+   - :options - keyword, only for :select input
+   - :render - function, only for :select input
+   - :size - integer, only for :select input
 
    As a result, interaction shows :message and asks for input depending
    on :input keyword.
@@ -113,6 +118,14 @@
    :newlines-submit is the number of subsequent newlines, after which
    input type :string submits the input (these newlines will be trimmed).
    Default is 0, which means single-line input. 
+
+   :options define key in state where to get options sequence for :select
+   input.
+
+   :render is a function which takes option item for :select input and
+   returns string to show a an option in select UI.
+
+   :size allows to implement padination in :select listing.
 
    If :validate predicate is defined and it returns NIL, UI asks for the
    input again.
@@ -127,18 +140,6 @@
    :key simply puts the input into the state. This option can be used
    instead of :function if the only goal of the interaction is to provide
    input that can be used in subsequent interactions.
-
-   Type :listing
-   -------------
-
-   :listing - keyword, the key in the state with the listing; or function
-   that takes state and returns listing. It is optional prop, and its
-   default value is keyword :listing.
-
-   Listing must be defined as list of plists, where required props are:
-
-   :label - string, what to show as an item
-   :index - interger index for item selection
 
    Type :message
    -------------
