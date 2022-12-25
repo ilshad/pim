@@ -75,11 +75,12 @@
 			  collect (list :index index
 					:option option
 					:render (funcall render option)))))
+        (fresh-line)
 	(dolist (item items)
 	  (format t "[ ~a ] ~a~%" (getf item :index) (getf item :render)))
 	(format t (if page?
-		      "[ C ] Cancel~%[   ] ...more~%"
-		      "[   ] Done~%"))
+		      "~%[ C ] Cancel~%[   ] more...~%"
+		      "~%[   ] Done~%"))
 	(prompt)
 	(let* ((input (string-trim '(#\Space) (read-line)))
 	       (index (parse-integer input :junk-allowed t)))

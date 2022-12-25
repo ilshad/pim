@@ -36,14 +36,14 @@
 				  :function #'create-entry-interaction
 				  :interactions :interactions))))
 
-(defun all-not-short-entries ()
+(defun all-entries-not-short ()
   (loop for id being the hash-keys in *entries* using (hash-value entry)
 	when (not (short? entry))
 	collect id))
 
 (defun search-entries (input state)
   (declare (ignore input))
-  (acons :ids (all-not-short-entries) state))
+  (acons :ids (all-entries-not-short) state))
 
 (defun entry-title (id)
   (let* ((entry (get-entry id))
@@ -68,12 +68,20 @@
 				  :key :id
 				  :render #'entry-title))))
 
+(defun all-predicates ()
+  (remove-duplicates (mapcar #'pred (remove nil *triples*)) :test #'string-equal))
+
 (defun predicates-search (input state)
-  (declare (ignore input))
-  (acons :predicates
-	 (remove-duplicates (mapcar #'pred (remove nil *triples*))
-			    :test #'string-equal)
-	 state))
+  (let ((all (all-predicates)))
+    (if input
+	(let ((found (remove-if-not #'(lambda (pred) (search input pred)) all)))
+	  (case (length found)
+	    (0 (acons :not-found? t state))
+	    (1 (append (list (cons :predicate (first found))
+			     (cons :single-match? t))
+		       state))
+	    (t (acons :predicates found state))))
+	(acons :predicates all state))))
 
 (defun predicate-search-objects (state)
   (let ((pred (cdr (assoc :predicate state))))
@@ -92,19 +100,25 @@
 		    :message "Predicate:"
 		    :function #'predicates-search)
 
-	      (list :type :input
+	      (list :when :not-found?
+		    :type :message
+		    :message "~%NO MATCH FOUND~%")
+              
+	      (list :when :predicates
+		    :type :input
 		    :input :select
 		    :options :predicates
 		    :key :predicate
-		    :render #'identity)
-
+		    :render #'identity
+		    :size 5)
+	      
 	      (list :type :break
-		    :when #'(lambda (state)
-			      (not (cdr (assoc :predicate state)))))
+		    :when #'(lambda (state) (not (cdr (assoc :predicate state)))))
 
 	      (list :type :message
 		    :message #'(lambda (state)
-				 (format nil "~%Selected predicate: ~a~%~%"
+				 (format nil "~%~:[Selected predicate~;Found single match~]: ~a~%~%"
+					 (cdr (assoc :single-match? state))
 					 (cdr (assoc :predicate state)))))
 
 	      (list :type :function
