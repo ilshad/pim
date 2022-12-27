@@ -5,8 +5,9 @@
 ;;
 
 (defun create-entry-interaction (input state)
-  (multiple-value-bind (entry interactions) (make-entry input)
-    (acons :id (id entry) (acons :interactions interactions state))))
+  (when (not (zerop (length input)))
+    (multiple-value-bind (entry interactions) (make-entry input)
+      (acons :id (id entry) (acons :interactions interactions state)))))
 
 (defun entry-route (state)
   (let ((id (cdr (assoc :id state))))
