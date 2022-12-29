@@ -2,7 +2,8 @@
   (:use #:cl)
   (:export #:string-cut
 	   #:url?
-	   #:find-urls))
+	   #:find-urls
+	   #:in-emacs?))
 
 (defpackage #:pkm-core
   (:use #:cl #:pkm-util)

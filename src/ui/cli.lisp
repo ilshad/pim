@@ -1,5 +1,39 @@
 (in-package #:pkm-cli)
 
+(defvar *colorize-output-p* nil)
+
+;;
+;; Output
+;;
+
+(defparameter *colors*
+  '(:error 1
+    :warning 140
+    :prompt 50
+    :info 100
+    :primary 110))
+
+(defun rgb-code (r g b)
+  (+ (* r 36) (* g 6) b 16))
+
+(defun ansi-color-start (color)
+  (format nil "~c[38;5;~dm" #\Escape color))
+
+(defun ansi-color-end ()
+  (format nil "~c[0m" #\Escape))
+
+(defun colorize-string (string color)
+  (format nil "~a~a~a" (ansi-color-start color) string (ansi-color-end)))
+
+(defun out (type format-string &rest args)
+  (format t (let ((string (apply #'format nil format-string args)))
+	      (if *colorize-output-p*
+		  (let ((color (getf *colors* type)))
+		    (if color
+			(colorize-string string color)
+			string))
+		  string))))
+
 ;;
 ;; Editor
 ;;
@@ -47,8 +81,8 @@
       (function function))))
 
 (defun prompt (&optional message)
-  (when message (format t message))
-  (format t "> ")
+  (when message (out :prompt message))
+  (out :prompt "> ")
   (force-output))
 
 (defun read-multiline (newlines-submit)
@@ -80,10 +114,10 @@
 					:render (funcall render option)))))
         (fresh-line)
 	(dolist (item items)
-	  (format t "[ ~a ] ~a~%" (getf item :index) (getf item :render)))
-	(format t (if page?
-		      "~%[ C ] Cancel~%[   ] more...~%"
-		      "~%[   ] Done~%"))
+	  (out :primary "[ ~a ] ~a~%" (getf item :index) (getf item :render)))
+	(out :primary (if page?
+			  "~%[ C ] Cancel~%[   ] more...~%"
+			  "~%[   ] Done~%"))
 	(prompt)
 	(let* ((input (string-trim '(#\Space) (read-line)))
 	       (index (parse-integer input :junk-allowed t)))
@@ -130,7 +164,7 @@
     (if validate
 	(if (funcall validate input state)
 	    input
-	    (progn (format t "Invalid input~%")
+	    (progn (out :error "Invalid input~%")
 		   (interaction-input interaction state)))
 	input)))
 
@@ -147,7 +181,7 @@
 				  state)))
 
 	    (:message
-	     (format t (interaction-message interaction state)))
+	     (out :primary (interaction-message interaction state)))
 
 	    (:function
 	     (setf state (funcall (getf interaction :function) state)))
@@ -213,7 +247,7 @@
 ;;
 
 (defun hr ()
-  (format t "~&~v{~c~:*~}~%" 66 '(#\-)))
+  (out :primary "~%~v{~c~:*~}~%" 66 '(#\-)))
 
 (defun read-menu-input (options)
   (prompt)
@@ -224,7 +258,7 @@
 	  (terpri)
 	  (when (not (string= result ""))
 	    result))
-	(progn (format t "Unexpected option: ~a~%" input)
+	(progn (out :error "Unexpected option: ~a~%" input)
 	       (read-menu-input options)))))
 
 (defun menu (options &key empty-option)
@@ -236,12 +270,13 @@
     (dolist (item options)
       (if (eq :separator (car item))
 	  (hr)
-	  (format t "[ ~a ] ~a~%"
-		  (let ((option (car item)))
-		    (if (string= option "")
-			" "
-			option))
-		  (cdr item))))
+	  (out :primary
+	       "[ ~a ] ~a~%"
+	       (let ((option (car item)))
+		 (if (string= option "")
+		     " "
+		     option))
+	       (cdr item))))
     (read-menu-input options)))
 
 (defun menu-items-triples (entry)
@@ -263,7 +298,7 @@
   (hr)
   (write-string (content entry))
   (hr)
-  (format t "ID: ~d~:[~;, short.~]~%" (id entry) (short? entry))
+  (out :info "ID: ~d~:[~;, short.~]~%" (id entry) (short? entry))
   (destructuring-bind (&key indexed-triples menu-items-triples) (menu-items-triples entry)
     (let* ((actions (cli-actions :entry (list :entry entry
 					      :indexed-triples indexed-triples
@@ -298,5 +333,6 @@
     ((eql route :exit) t)))
 
 (defun start ()
-  (let ((*status-output* *terminal-io*))
+  (let ((*status-output* *terminal-io*)
+	(*colorize-output-p* (not (in-emacs?))))
     (route :main)))
