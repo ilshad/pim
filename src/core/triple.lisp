@@ -26,15 +26,6 @@
 (defun ensure-triple (triple)
   (or (get-triple triple) (add-triple triple)))
 
-(defun format-triple (stream triple entry)
-  (multiple-value-bind (other-entry position) (complement-entry entry triple)
-    (multiple-value-bind (content cut?) (string-cut (content other-entry) 80)
-      (case position
-	(:subj
-	 (format stream "-> ~a -> ~a~:[~;...~]" (pred triple) content cut?))
-	(:obj
-	 (format stream "<- ~a <- ~a~:[~;...~]" (pred triple) content cut?))))))
-
 (defun subj (triple) (car triple))
 (defun pred (triple) (cadr triple))
 (defun obj (triple) (caddr triple))
@@ -122,3 +113,22 @@
   (let ((obj (get-entry (obj triple))))
     (when (orphan? obj)
       (del-entry obj))))
+
+(defun entry-title-by-property (entry)
+  (let ((title-property (first (get-property-triples entry "title"))))
+    (when title-property
+      (content (get-entry (obj title-property))))))
+
+(defun entry-title (entry)
+  (string-cut (or (entry-title-by-property entry)
+		  (content entry))
+	      80))
+
+(defun format-triple (stream triple entry)
+  (multiple-value-bind (other-entry position) (complement-entry entry triple)
+    (multiple-value-bind (content cut?) (entry-title other-entry)
+      (case position
+	(:subj
+	 (format stream "-> ~a -> ~a~:[~;...~]" (pred triple) content cut?))
+	(:obj
+	 (format stream "<- ~a <- ~a~:[~;...~]" (pred triple) content cut?))))))

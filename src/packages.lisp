@@ -30,7 +30,6 @@
 	   #:add-triple
 	   #:del-triple
 	   #:ensure-triple
-	   #:format-triple
 	   #:subj
 	   #:pred
 	   #:obj
@@ -43,6 +42,8 @@
 	   #:del-property-triple
 	   #:set-property-triple
 	   #:del-orphan
+	   #:entry-title
+	   #:format-triple
 
 	   #:define-handler
 	   #:define-action

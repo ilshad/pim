@@ -37,12 +37,8 @@
 				  :function #'create-entry-interaction
 				  :interactions :interactions))))
 
-(defun entry-title (id)
-  (let* ((entry (get-entry id))
-	 (property (first (get-property-triples entry "title"))))
-    (if property
-	(content (get-entry (obj property)))
-	(string-cut (content entry) 80))))
+(defun entry-title-by-id (id)
+  (entry-title (get-entry id)))
 
 (defun all-entries-not-short ()
   (loop for id being the hash-keys in *entries* using (hash-value entry)
@@ -91,7 +87,7 @@
 				  :input :select
 				  :options :ids
 				  :key :id
-				  :render #'entry-title))))
+				  :render #'entry-title-by-id))))
 
 (defun all-predicates ()
   (remove-duplicates (mapcar #'pred (remove nil *triples*)) :test #'string-equal))
@@ -152,7 +148,7 @@
 				  :input :select
 				  :options :ids
 				  :key :id
-				  :render #'entry-title))))
+				  :render #'entry-title-by-id))))
 
 (define-action quit (:main 50) (context)
   (declare (ignore context))
