@@ -2,4 +2,4 @@
 
 (defun run ()
   (init-db)
-  (pkm-cli:route :main))
+  (pkm-cli:start))

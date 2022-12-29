@@ -10,6 +10,8 @@
 	   #:*shorts*
 	   #:*triples*
 
+	   #:*status-output*
+
 	   #:init-db
 
 	   #:id
@@ -51,7 +53,7 @@
 
 (defpackage #:pkm-cli
   (:use #:cl #:pkm-core	#:pkm-util)
-  (:export #:route))
+  (:export #:start))
 
 (defpackage #:pkm
   (:use #:cl #:pkm-core)

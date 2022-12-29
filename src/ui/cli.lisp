@@ -296,3 +296,7 @@
      (entry-view (get-entry (second route))))
 
     ((eql route :exit) t)))
+
+(defun start ()
+  (let ((*status-output* *terminal-io*))
+    (route :main)))

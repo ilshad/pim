@@ -1,5 +1,7 @@
 (in-package #:pkm-core)
 
+(defvar *status-output* nil)
+
 (defparameter *handlers-tmp* nil)
 (defparameter *handlers-sorted* nil)
 (defparameter *handlers-ops* nil)

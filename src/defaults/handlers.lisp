@@ -28,6 +28,7 @@
   nil)
 
 (defun extract-title-from-url (url)
+  (format *status-output* "~&Extracting page title from ~a...~%" url)
   (multiple-value-bind (body status) (drakma:http-request url)
     (when (= status 200)
       (let ((parsed (lquery:$ (initialize body))))
