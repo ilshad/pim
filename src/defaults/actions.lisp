@@ -60,13 +60,13 @@
     ids))
 
 (defun search-entries (input state)
-  (if input
+  (if (zerop (length input))
+      (acons :ids (all-entries-not-short) state)
       (let ((ids (search-entries-by-shorts input)))
 	(case (length ids)
 	  (0 (acons :not-found? t state))
 	  (1 (acons :id (first ids) state))
-	  (t (acons :ids ids state))))
-      (acons :ids (all-entries-not-short) state)))
+	  (t (acons :ids ids state))))))
 
 (define-action search (:main 30) (context)
   (declare (ignore context))
@@ -94,15 +94,15 @@
 
 (defun predicates-search (input state)
   (let ((all (all-predicates)))
-    (if input
+    (if (zerop (length input))
+	(acons :predicates all state)
 	(let ((found (remove-if-not #'(lambda (pred) (search input pred)) all)))
-	  (case (length found)
+          (case (length found)
 	    (0 (acons :not-found? t state))
 	    (1 (append (list (cons :predicate (first found))
 			     (cons :single-match? t))
 		       state))
-	    (t (acons :predicates found state))))
-	(acons :predicates all state))))
+	    (t (acons :predicates found state)))))))
 
 (defun predicate-search-objects (state)
   (let ((pred (cdr (assoc :predicate state))))
