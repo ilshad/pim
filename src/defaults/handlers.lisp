@@ -1,4 +1,4 @@
-(in-package #:pkm-defaults)
+(in-package #:pim-defaults)
 
 (define-handler update-short (:add :edit) () (entry context)
   "Shorts are entries, whose content can be used as identifiers, so

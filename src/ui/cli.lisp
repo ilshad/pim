@@ -1,4 +1,4 @@
-(in-package #:pkm-cli)
+(in-package #:pim-cli)
 
 (defvar *colorize-output-p* nil)
 
@@ -38,7 +38,7 @@
 ;; Editor
 ;;
 
-(defparameter *content-tmp-namestring* "~/.pkm/tmp/entry.md")
+(defparameter *content-tmp-namestring* "~/.pim/tmp/entry.md")
 
 (defparameter *editor-program-cmd*
   '("/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"

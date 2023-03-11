@@ -1,12 +1,12 @@
-(defpackage #:pkm-util
+(defpackage #:pim-util
   (:use #:cl)
   (:export #:string-cut
 	   #:url?
 	   #:find-urls
 	   #:in-emacs?))
 
-(defpackage #:pkm-core
-  (:use #:cl #:pkm-util)
+(defpackage #:pim-core
+  (:use #:cl #:pim-util)
   (:export #:*entries*
 	   #:*shorts*
 	   #:*triples*
@@ -50,13 +50,13 @@
 	   #:define-action
 	   #:view-actions))
 
-(defpackage #:pkm-defaults
-  (:use #:cl #:pkm-core	#:pkm-util))
+(defpackage #:pim-defaults
+  (:use #:cl #:pim-core	#:pim-util))
 
-(defpackage #:pkm-cli
-  (:use #:cl #:pkm-core	#:pkm-util)
+(defpackage #:pim-cli
+  (:use #:cl #:pim-core	#:pim-util)
   (:export #:start))
 
-(defpackage #:pkm
-  (:use #:cl #:pkm-core)
+(defpackage #:pim
+  (:use #:cl #:pim-core)
   (:export #:run))

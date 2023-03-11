@@ -1,4 +1,4 @@
-(asdf:defsystem "pkm"
+(asdf:defsystem "pim"
   :depends-on ("cl-ppcre" "drakma" "lquery")
   :serial t
   :components ((:file "src/packages")

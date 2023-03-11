@@ -1,4 +1,4 @@
-(in-package #:pkm-core)
+(in-package #:pim-core)
 
 (defun get-triple (triple &optional (triples *triples*))
   (if (equalp triple (car triples))

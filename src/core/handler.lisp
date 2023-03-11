@@ -1,4 +1,4 @@
-(in-package #:pkm-core)
+(in-package #:pim-core)
 
 (defvar *status-output* nil)
 

@@ -1,4 +1,4 @@
-(in-package #:pkm-core)
+(in-package #:pim-core)
 
 (defparameter *actions* nil)
 
@@ -208,7 +208,7 @@
    interactions and route from one view to another.
 
    See the example in 'ui/cli.lisp' for the CLI frontend:
-     - 'pkm-cli::cli-actions' to build a menu,
-     - 'pkm-cli::run-action' to react to the input on the menu."
+     - 'pim-cli::cli-actions' to build a menu,
+     - 'pim-cli::run-action' to react to the input on the menu."
   (remove nil (mapcar #'(lambda (cons) (funcall (car cons) context))
 		      (getf *actions* view-name))))

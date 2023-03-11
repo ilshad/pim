@@ -1,4 +1,4 @@
-(in-package #:pkm-core)
+(in-package #:pim-core)
 
 ;;
 ;; Indexes
@@ -12,7 +12,7 @@
 ;; Pathnames
 ;;
 
-(defparameter *base-directory-namestring* "~/.pkm/var")
+(defparameter *base-directory-namestring* "~/.pim/var")
 (defparameter *db-directory-name* "db")
 (defparameter *entries-directory-name* "entries")
 (defparameter *triples-file-name* "triples.sexp")

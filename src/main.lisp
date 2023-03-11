@@ -1,5 +1,5 @@
-(in-package #:pkm)
+(in-package #:pim)
 
 (defun run ()
   (init-db)
-  (pkm-cli:start))
+  (pim-cli:start))
