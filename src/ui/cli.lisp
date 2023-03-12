@@ -34,6 +34,14 @@
 			string))
 		  string))))
 
+(defun prompt (&optional message)
+  (when message (out :prompt message))
+  (out :prompt "> ")
+  (force-output))
+
+(defun hr ()
+  (out :primary "~%~v{~c~:*~}~%" 66 '(#\-)))
+
 ;;
 ;; Editor
 ;;
@@ -54,7 +62,7 @@
     (uiop:read-file-string tmp)))
 
 ;;
-;; Actions & Interactions
+;; Interactions
 ;;
 
 (defun interaction-when (interaction state)
@@ -79,11 +87,6 @@
     (cond
       (key #'(lambda (input state) (acons key input state)))
       (function function))))
-
-(defun prompt (&optional message)
-  (when message (out :prompt message))
-  (out :prompt "> ")
-  (force-output))
 
 (defun read-multiline (newlines-submit)
   (let ((empty-lines-counter 0))
@@ -204,6 +207,10 @@
 	(return)))
     state))
 
+;;
+;;
+;; Actions
+
 (defun action-menu-option (action)
   (cons (getf action :command)
 	(or (getf action :description)
@@ -243,11 +250,8 @@
     (when function (funcall function))))
 
 ;;
-;; Views
+;; Menu
 ;;
-
-(defun hr ()
-  (out :primary "~%~v{~c~:*~}~%" 66 '(#\-)))
 
 (defun read-menu-input (options)
   (prompt)
@@ -292,6 +296,10 @@
 	  (loop for item in indexed-triples
 		collect (cons (prin1-to-string (car item))
 			      (format-triple nil (cdr item) entry))))))
+
+;;
+;; Views
+;;
 
 (defun entry-view (entry)
   (terpri)
