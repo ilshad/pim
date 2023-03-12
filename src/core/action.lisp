@@ -123,7 +123,8 @@
    input.
 
    :render is a function which takes option item for :select input and
-   returns string to show a an option in select UI.
+   returns string to show a an option in select UI. Default is #'identity,
+   which implies that the option is already proper string to display in UI.
 
    :size allows to implement padination in :select listing.
 

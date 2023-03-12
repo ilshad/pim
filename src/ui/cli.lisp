@@ -103,7 +103,7 @@
 (defun input-select (interaction state)
   (let ((options (copy-seq (cdr (assoc (getf interaction :options) state))))
 	(size (getf interaction :size *default-input-select-size*))
-	(render (getf interaction :render)))
+	(render (getf interaction :render #'identity)))
     (loop
       (when (null options) (return))
       (let* ((page? (> (length options) size))

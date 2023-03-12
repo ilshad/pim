@@ -128,8 +128,7 @@
 				  :type :input
 				  :input :select
 				  :options :predicates
-				  :key :predicate
-				  :render #'identity)
+				  :key :predicate)
 			    
 			    (list :type :break
 				  :when-not :predicate)
