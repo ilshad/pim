@@ -39,11 +39,10 @@
    and set it as a 'title' property."
   (declare (ignore context))
   (when (get-property-triple entry "type" "URL")
-    (let ((title (handler-case (extract-title-from-url (content entry))
-		   (error () nil))))
-      (when title
-	(set-property-triple entry "title" title)
-	nil))))
+    (when-let ((title (handler-case (extract-title-from-url (content entry))
+			(error () nil))))
+      (set-property-triple entry "title" title)
+      nil)))
 
 (define-handler has-url (:add :edit) (type-url) (entry context)
   "1. Extract all URLs from the content.

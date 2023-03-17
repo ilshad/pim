@@ -10,10 +10,9 @@
       (acons :id (id entry) (acons :interactions interactions state)))))
 
 (defun entry-route (state)
-  (let ((id (cdr (assoc :id state))))
-    (if id
-	(list :entry id)
-	:main)))
+  (if-let (id (cdr (assoc :id state)))
+    (list :entry id)
+    :main))
 
 (define-action create-entry-with-string (:main 10) (context)
   (declare (ignore context))
@@ -161,13 +160,12 @@
 ;;
 
 (defun trim-if-one-liner (string)
-  (let ((first-newline (position #\Newline string)))
-    (if first-newline
-	(let ((rest-string (subseq string first-newline)))
-	  (if (zerop (length (string-trim '(#\Newline #\Space) rest-string)))
-	      (string-right-trim '(#\Newline #\Space) string)
-	      string))
-	string)))
+  (if-let (first-newline (position #\Newline string))
+    (let ((rest-string (subseq string first-newline)))
+      (if (zerop (length (string-trim '(#\Newline #\Space) rest-string)))
+	  (string-right-trim '(#\Newline #\Space) string)
+	  string))
+    string))
 
 (define-action edit (:entry 10) (context)
   (list :label "Edit"
@@ -207,8 +205,8 @@
 		    :interactions :interactions))))
 
 (defun parse-entry-id (string)
-  (let ((found (ppcre:all-matches-as-strings "^#\\d+$" string)))
-    (when found (parse-integer (subseq (first found) 1)))))
+  (when-let (found (ppcre:all-matches-as-strings "^#\\d+$" string))
+    (parse-integer (subseq (first found) 1))))
 
 (defun string-not-empty-validation (input state)
   (declare (ignore state))
@@ -246,10 +244,9 @@
 	    :command "-"
 	    :function #'(lambda (state)
 			  (when (cdr (assoc :delete? state))
-			    (let ((triple (selected-triple state)))
-			      (when triple
-				(del-triple triple)
-				(del-orphan triple)))))
+			    (when-let (triple (selected-triple state))
+                              (del-triple triple)
+			      (del-orphan triple))))
 	    :interactions
 	    (list (list :type :input
 			:input :integer

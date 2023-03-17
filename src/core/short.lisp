@@ -11,8 +11,8 @@
 
 (defun get-short (content)
   (when (short-content? content)
-    (let ((id (gethash content *shorts*)))
-      (when id (get-entry id)))))
+    (when-let (id (gethash content *shorts*))
+      (get-entry id))))
 
 (defun ensure-short (string)
   (let ((content (string-trim '(#\Space #\Newline) string)))

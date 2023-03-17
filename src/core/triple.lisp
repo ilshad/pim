@@ -85,17 +85,15 @@
   (ensure-triple (list (id entry) key (id (ensure-short value)))))
 
 (defun get-property-triple (entry key value)
-  (let ((property-entry (get-short value)))
-    (when property-entry
-      (get-triple (list (id entry) key (id property-entry))))))
+  (when-let (property-entry (get-short value))
+    (get-triple (list (id entry) key (id property-entry)))))
 
 (defun get-property-triples (entry key)
   (search-triples (id entry) key))
 
 (defun del-property-triple (entry key value)
-  (let ((property-entry (get-short value)))
-    (when property-entry
-      (del-triple (list (id entry) key (id property-entry))))))
+  (when-let (property-entry (get-short value))
+    (del-triple (list (id entry) key (id property-entry)))))
 
 (defun set-property-triple (entry key value)
   (let ((foundp))
@@ -115,9 +113,8 @@
       (del-entry obj))))
 
 (defun entry-title-by-property (entry)
-  (let ((title-property (first (get-property-triples entry "title"))))
-    (when title-property
-      (content (get-entry (obj title-property))))))
+  (when-let (title-property (first (get-property-triples entry "title")))
+    (content (get-entry (obj title-property)))))
 
 (defun entry-title (entry)
   (string-cut (or (entry-title-by-property entry)

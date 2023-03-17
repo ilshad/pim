@@ -13,8 +13,6 @@
   (ppcre:all-matches-as-strings "(https?:\\/\\/\\S+\\w)+" string))
 
 (defun in-emacs? ()
-  (let ((package (find-package "SWANK")))
-    (when package
-      (let ((symbol (find-symbol "*GLOBALLY-REDIRECT-IO*" package)))
-	(when symbol
-	  (eq (symbol-value symbol) :started-from-emacs))))))
+  (when-let* ((package (find-package "SWANK"))
+	      (symbol (find-symbol "*GLOBALLY-REDIRECT-IO*" package)))
+    (eq (symbol-value symbol) :started-from-emacs)))

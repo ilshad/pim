@@ -1,5 +1,5 @@
 (asdf:defsystem "pim"
-  :depends-on ("cl-ppcre" "drakma" "lquery")
+  :depends-on ("cl-ppcre" "drakma" "lquery" "alexandria")
   :serial t
   :components ((:file "src/packages")
 	       (:file "src/util")

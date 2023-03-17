@@ -28,10 +28,9 @@
 (defun out (type format-string &rest args)
   (format t (let ((string (apply #'format nil format-string args)))
 	      (if *colorize-output-p*
-		  (let ((color (getf *colors* type)))
-		    (if color
-			(colorize-string string color)
-			string))
+		  (if-let (color (getf *colors* type))
+                    (colorize-string string color)
+		    string)
 		  string))))
 
 (defun prompt (&optional message)
@@ -122,11 +121,10 @@
 			  "~%[ C ] Cancel~%[   ] more...~%"
 			  "~%[   ] Done~%"))
 	(prompt)
-	(let* ((input (string-trim '(#\Space) (read-line)))
-	       (index (parse-integer input :junk-allowed t)))
-	  (when index
-	    (let ((item (find index items :key #'(lambda (item) (getf item :index)))))
-	      (when item (return (getf item :option)))))
+	(let* ((input (string-trim '(#\Space) (read-line))))
+	  (when-let* ((index (parse-integer input :junk-allowed t))
+		      (item (find index items :key #'(lambda (item) (getf item :index)))))
+            (return (getf item :option)))
 	  (when (string-equal input "C") (return)))
 	(if page?
 	    (setf options (subseq options size))
@@ -162,14 +160,13 @@
      (input-select interaction state))))
 
 (defun interaction-input (interaction state)
-  (let ((input (interaction-read-input interaction state))
-	(validate (getf interaction :validate)))
-    (if validate
-	(if (funcall validate input state)
-	    input
-	    (progn (out :error "Invalid input~%")
-		   (interaction-input interaction state)))
-	input)))
+  (let ((input (interaction-read-input interaction state)))
+    (if-let (validate (getf interaction :validate)) 
+      (if (funcall validate input state)
+	  input
+	  (progn (out :error "Invalid input~%")
+		 (interaction-input interaction state)))
+      input)))
 
 (defun cli-interactions (interactions)
   (let ((index 0) state)
@@ -197,19 +194,17 @@
 
 	    (:break (return)))
 
-	  (let ((k (getf interaction :interactions)))
-	    (when k
-	      (let ((nested (cdr (assoc k state))))
-		(when nested
-		  (cli-interactions nested)))))))
+	  (when-let* ((k (getf interaction :interactions))
+		      (nested (cdr (assoc k state))))
+            (cli-interactions nested))))
 
       (when (= index (length interactions))
 	(return)))
     state))
 
 ;;
-;;
 ;; Actions
+;;
 
 (defun action-menu-option (action)
   (cons (getf action :command)
@@ -244,10 +239,10 @@
 	  :action-runners (mapcar #'action-runner actions))))
 
 (defun run-action (input actions)
-  (let ((function (cdr (assoc input
-			      (getf actions :action-runners)
-			      :test #'string-equal))))
-    (when function (funcall function))))
+  (when-let (function (cdr (assoc input
+				  (getf actions :action-runners)
+				  :test #'string-equal)))
+    (funcall function)))
 
 ;;
 ;; Menu
@@ -255,15 +250,14 @@
 
 (defun read-menu-input (options)
   (prompt)
-  (let* ((input (string-trim '(#\Space) (read-line)))
-	 (result (car (assoc input options :test #'string-equal))))
-    (if result
-	(progn
-	  (terpri)
-	  (when (not (string= result ""))
-	    result))
-	(progn (out :error "Unexpected option: ~a~%" input)
-	       (read-menu-input options)))))
+  (let ((input (string-trim '(#\Space) (read-line))))
+    (if-let (result (car (assoc input options :test #'string-equal)))
+      (progn
+	(terpri)
+	(when (not (string= result ""))
+	  result))
+      (progn (out :error "Unexpected option: ~a~%" input)
+	     (read-menu-input options)))))
 
 (defun menu (options &key empty-option)
   (fresh-line)
@@ -317,9 +311,8 @@
 	   (input (menu options))
 	   (index (read-from-string input)))
       (if (integerp index)
-	  (let ((triple (cdr (assoc index indexed-triples :test #'eql))))
-	    (when triple
-	      (route (list :entry (id (complement-entry entry triple))))))
+	  (when-let (triple (cdr (assoc index indexed-triples :test #'eql)))
+            (route (list :entry (id (complement-entry entry triple)))))
 	  (route (or (run-action input actions)
 		     (list :entry (id entry))))))))
 

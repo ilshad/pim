@@ -1,12 +1,12 @@
 (defpackage #:pim-util
-  (:use #:cl)
+  (:use #:common-lisp #:alexandria)
   (:export #:string-cut
 	   #:url?
 	   #:find-urls
 	   #:in-emacs?))
 
 (defpackage #:pim-core
-  (:use #:cl #:pim-util)
+  (:use #:common-lisp #:alexandria #:pim-util)
   (:export #:*entries*
 	   #:*shorts*
 	   #:*triples*
@@ -51,10 +51,10 @@
 	   #:view-actions))
 
 (defpackage #:pim-defaults
-  (:use #:cl #:pim-core	#:pim-util))
+  (:use #:common-lisp #:alexandria #:pim-core #:pim-util))
 
 (defpackage #:pim-cli
-  (:use #:cl #:pim-core	#:pim-util)
+  (:use #:common-lisp #:alexandria #:pim-core #:pim-util)
   (:export #:start))
 
 (defpackage #:pim
