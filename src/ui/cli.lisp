@@ -8,9 +8,8 @@
 
 (defparameter *colors*
   '(:error 1
-    :warning 140
-    :prompt 50
-    :info 100
+    :warning 130
+    :info 70
     :primary 110))
 
 (defun rgb-code (r g b)
@@ -34,12 +33,12 @@
 		  string))))
 
 (defun prompt (&optional message)
-  (when message (out :prompt message))
-  (out :prompt "> ")
+  (when message (out :primary message))
+  (out :primary "> ")
   (force-output))
 
 (defun hr ()
-  (out :primary "~%~v{~c~:*~}~%" 66 '(#\-)))
+  (out :primary "~&~v{~c~:*~}~%" 66 '(#\-)))
 
 ;;
 ;; Editor
@@ -114,7 +113,7 @@
 			  collect (list :index index
 					:option option
 					:render (funcall render option)))))
-        (fresh-line)
+        (terpri)
 	(dolist (item items)
 	  (out :primary "[ ~a ] ~a~%" (getf item :index) (getf item :render)))
 	(out :primary (if page?
@@ -260,7 +259,6 @@
 	     (read-menu-input options)))))
 
 (defun menu (options &key empty-option)
-  (fresh-line)
   (hr)
   (let ((options (append options
 			 (when empty-option
@@ -296,9 +294,8 @@
 ;;
 
 (defun entry-view (entry)
-  (terpri)
   (hr)
-  (write-string (content entry))
+  (write-line (content entry))
   (hr)
   (out :info "ID: ~d~:[~;, short.~]~%" (id entry) (short? entry))
   (destructuring-bind (&key indexed-triples menu-items-triples) (menu-items-triples entry)

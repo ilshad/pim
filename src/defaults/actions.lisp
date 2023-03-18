@@ -135,7 +135,7 @@
 			    (list :type :message
 				  :message
 				  #'(lambda (state)
-				      (format nil "~%~:[Selected predicate~;Found single match~]: ~a~%~%"
+				      (format nil "~%~:[Selected predicate~;Found single match~]: ~a~%"
 					      (cdr (assoc :single-match? state))
 					      (cdr (assoc :predicate state)))))
 
