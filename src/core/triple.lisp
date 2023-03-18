@@ -3,7 +3,8 @@
 (defun get-triple (triple &optional (triples *triples*))
   (if (equalp triple (car triples))
       (car triples)
-      (when (cdr triples) (get-triple triple (cdr triples)))))
+      (when (cdr triples)
+	(get-triple triple (cdr triples)))))
 
 (defun set-triple* (old new triples)
   (if (equalp old (car triples))
@@ -112,20 +113,15 @@
     (when (orphan? obj)
       (del-entry obj))))
 
-(defun entry-title-by-property (entry)
-  (when-let (title-property (first (get-property-triples entry "title")))
-    (content (get-entry (obj title-property)))))
-
 (defun entry-title (entry)
-  (string-cut (or (entry-title-by-property entry)
-		  (content entry))
-	      80))
+  (if-let (triple (first (get-property-triples entry "title")))
+    (format nil "~a (~a)"
+	    (string-cut (content entry) 20 "...")
+	    (string-cut (content (get-entry (obj triple))) 60 "..."))
+    (string-cut (content entry) 80 "...")))
 
 (defun format-triple (stream triple entry)
-  (multiple-value-bind (other-entry position) (complement-entry entry triple)
-    (multiple-value-bind (content cut?) (entry-title other-entry)
-      (case position
-	(:subj
-	 (format stream "-> ~a -> ~a~:[~;...~]" (pred triple) content cut?))
-	(:obj
-	 (format stream "<- ~a <- ~a~:[~;...~]" (pred triple) content cut?))))))
+  (multiple-value-bind (complement position) (complement-entry entry triple)
+    (case position
+      (:subj (format stream "-> ~a -> ~a" (pred triple) (entry-title complement)))
+      (:obj (format stream "<- ~a <- ~a" (pred triple) (entry-title complement))))))

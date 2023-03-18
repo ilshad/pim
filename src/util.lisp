@@ -1,9 +1,12 @@
 (in-package #:pim-util)
 
-(defun string-cut (string length)
-  (let ((length (min length (or (position #\Newline string) (1+ length)))))
+(defun string-cut (string length &optional (suffix ""))
+  (let ((string (if-let (newline-position (position #\Newline string))
+		  (subseq string 0 newline-position)
+		  string)))
     (if (< length (length string))
-	(values (subseq string 0 length) t)
+	(let ((string (subseq string 0 (- length (length suffix)))))
+          (values (format nil "~a~a" string suffix) t))
 	string)))
 
 (defun url? (string)
