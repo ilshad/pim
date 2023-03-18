@@ -12,25 +12,19 @@
     :info 70
     :primary 110))
 
-(defun rgb-code (r g b)
-  (+ (* r 36) (* g 6) b 16))
-
-(defun ansi-color-start (color)
-  (format nil "~c[38;5;~dm" #\Escape color))
-
-(defun ansi-color-end ()
-  (format nil "~c[0m" #\Escape))
-
 (defun colorize-string (string color)
-  (format nil "~a~a~a" (ansi-color-start color) string (ansi-color-end)))
+  (format nil "~c[38;5;~dm~a~c[0m" #\Escape color string #\Escape))
+
+(defun out-string (type format-string &rest args)
+  (format nil (let ((string (apply #'format nil format-string args)))
+		(if *colorize-output-p*
+		    (if-let (color (getf *colors* type))
+                      (colorize-string string color)
+		      string)
+		    string))))
 
 (defun out (type format-string &rest args)
-  (format t (let ((string (apply #'format nil format-string args)))
-	      (if *colorize-output-p*
-		  (if-let (color (getf *colors* type))
-                    (colorize-string string color)
-		    string)
-		  string))))
+  (format t (apply #'out-string type format-string args)))
 
 (defun prompt (&optional message)
   (when message (out :primary message))
@@ -132,7 +126,7 @@
 (defun interaction-read-input (interaction state)
   (case (getf interaction :input)
     (:boolean
-     (funcall #'y-or-n-p (interaction-message interaction state)))
+     (funcall #'y-or-n-p (out-string :primary (interaction-message interaction state))))
 
     (:integer
      (prompt (interaction-message interaction state))

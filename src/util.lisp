@@ -19,3 +19,6 @@
   (when-let* ((package (find-package "SWANK"))
 	      (symbol (find-symbol "*GLOBALLY-REDIRECT-IO*" package)))
     (eq (symbol-value symbol) :started-from-emacs)))
+
+(defun rgb-code (r g b)
+  (+ (* r 36) (* g 6) b 16))
