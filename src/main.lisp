@@ -1,5 +1,5 @@
 (in-package #:pim)
 
 (defun run ()
-  (init-db)
+  (pim-core:init-db)
   (pim-cli:start))

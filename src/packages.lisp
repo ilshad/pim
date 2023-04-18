@@ -11,10 +11,10 @@
 	   #:*shorts*
 	   #:*triples*
 
-	   #:*status-output*
-
+	   ;; Database
 	   #:init-db
 
+	   ;; Entries
 	   #:id
 	   #:content
 	   #:make-entry
@@ -22,12 +22,14 @@
 	   #:edit-entry
 	   #:del-entry
 
+	   ;; Shorts
 	   #:short-content?
 	   #:short?
 	   #:ensure-short
 	   #:set-short
 	   #:del-short
 
+	   ;; Triples
 	   #:add-triple
 	   #:del-triple
 	   #:ensure-triple
@@ -46,9 +48,11 @@
 	   #:entry-title
 	   #:format-triple
 
+	   ;; Behavior
 	   #:define-handler
 	   #:define-action
-	   #:view-actions))
+	   #:view-actions
+	   #:*status-output*))
 
 (defpackage #:pim-defaults
   (:use #:common-lisp #:alexandria #:pim-core #:pim-util))
@@ -58,5 +62,5 @@
   (:export #:start))
 
 (defpackage #:pim
-  (:use #:cl #:pim-core)
+  (:use #:common-lisp)
   (:export #:run))

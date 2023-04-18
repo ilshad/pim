@@ -1,10 +1,10 @@
 (in-package #:pim-cli)
 
-(defvar *colorize-output-p* nil)
-
 ;;
 ;; Output
 ;;
+
+(defvar *colorize-output-p* nil)
 
 (defparameter *colors*
   '(:error 1
@@ -44,6 +44,8 @@
   '("/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"
     "-w"
     :tmp))
+
+;(defparameter *editor-program-cmd* '("vim" :tmp))
 
 (defun edit-string-in-program (&optional (string ""))
   (let ((tmp (uiop:native-namestring *content-tmp-namestring*)))
