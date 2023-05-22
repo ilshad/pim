@@ -40,19 +40,15 @@
 
 (defparameter *content-tmp-namestring* "~/.pim/tmp/entry.md")
 
-(defparameter *editor-program-cmd*
-  '("/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"
-    "-w"
-    :tmp))
-
-;(defparameter *editor-program-cmd* '("vim" :tmp))
-
-(defun edit-string-in-program (&optional (string ""))
+(defun edit-string-in-vim (&optional (string ""))
   (let ((tmp (uiop:native-namestring *content-tmp-namestring*)))
     (ensure-directories-exist tmp)
     (with-open-file (out tmp :direction :output :if-exists :supersede)
       (write-string string out))
-    (uiop:run-program (substitute tmp :tmp *editor-program-cmd*))
+    (uiop:wait-process
+     (uiop:launch-program (list "vim" tmp)
+			  :input :interactive
+			  :output :interactive))
     (uiop:read-file-string tmp)))
 
 ;;
@@ -145,7 +141,7 @@
     (:editor
      (string-left-trim
       '(#\Newline)
-      (edit-string-in-program
+      (edit-string-in-vim
        (let ((content-function (getf interaction :content)))
 	 (if content-function
 	     (funcall content-function state)
